@@ -350,6 +350,45 @@ func TestVideoSubtitleFiltersTracks(t *testing.T) {
 	}
 }
 
+func TestVideoSubtitleDoesNotFetchFirstPageForMultiPartVideo(t *testing.T) {
+	playerRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/x/player/pagelist":
+			fmt.Fprint(w, `{"code":0,"data":[{"cid":41,"part":"first"},{"cid":42,"part":"second"}]}`)
+		case "/x/player/v2":
+			playerRequests++
+			fmt.Fprint(w, `{"code":0,"data":{"subtitle":{"subtitles":[]}}}`)
+		default:
+			t.Fatalf("unexpected request path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	app := newTestApp(t)
+	app.API.BaseURL = server.URL
+	app.API.HTTP = server.Client()
+	stdout := &bytes.Buffer{}
+	app.Out = &output.Writer{Stdout: stdout, Stderr: &bytes.Buffer{}, DefaultMode: "rich"}
+	root := NewRoot(app)
+	root.SetArgs([]string{"video", "st", "BV1ABcsztEcY", "--json"})
+	err := root.ExecuteContext(context.Background())
+	if api.CodeOf(err) != api.CodeInvalidInput {
+		t.Fatalf("unexpected multi part error: %s", api.CodeOf(err))
+	}
+	var envelope map[string]any
+	if decodeErr := json.Unmarshal(stdout.Bytes(), &envelope); decodeErr != nil {
+		t.Fatalf("invalid structured page error: %v", decodeErr)
+	}
+	details := envelope["error"].(map[string]any)["details"].(map[string]any)
+	if len(details["pages"].([]any)) != 2 {
+		t.Fatalf("unexpected page details: %#v", details)
+	}
+	if playerRequests != 0 {
+		t.Fatalf("requested first page subtitle: %d", playerRequests)
+	}
+}
+
 func TestFilterSubtitleTracksSupportsIDs(t *testing.T) {
 	tracks := []api.SubtitleTrack{
 		{ID: "11", Language: "zh-CN"},
@@ -374,8 +413,8 @@ func TestVideoSubtitleAliasExportsEachTrack(t *testing.T) {
 	if err := root.ExecuteContext(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	zhPath := filepath.Join(outputDir, "BV1ABcsztEcY.01.zh-CN.srt")
-	enPath := filepath.Join(outputDir, "BV1ABcsztEcY.02.en-US.srt")
+	zhPath := filepath.Join(outputDir, "demo.zh-CN.srt")
+	enPath := filepath.Join(outputDir, "demo.en-US-ai.srt")
 	zhData, err := os.ReadFile(zhPath)
 	if err != nil {
 		t.Fatal(err)
@@ -388,17 +427,18 @@ func TestVideoSubtitleAliasExportsEachTrack(t *testing.T) {
 	}
 }
 
-func TestExportSubtitleFilesUsesSRTSuffixForAllTracks(t *testing.T) {
-	outputPath := filepath.Join(t.TempDir(), "subt.srt")
+func TestExportSubtitleFilesUsesVideoBaseName(t *testing.T) {
+	outputDir := t.TempDir()
+	videoTitle := videoDownloadFileTitle("demo", 2, 3, "second")
 	items := []subtitleCommandItem{
 		{Track: api.SubtitleTrack{Language: "zh-CN"}, Cues: []api.SubtitleCue{{From: 0, To: 1, Content: "normal"}}},
 		{Track: api.SubtitleTrack{Language: "zh-CN", Type: 1}, Cues: []api.SubtitleCue{{From: 0, To: 1, Content: "ai"}}},
 	}
-	if err := exportSubtitleFiles(outputPath, "BV1ABcsztEcY", items); err != nil {
+	if err := exportSubtitleFiles(outputDir, videoTitle, items); err != nil {
 		t.Fatal(err)
 	}
-	normalPath := filepath.Join(filepath.Dir(outputPath), "subt-zh_CN.srt")
-	aiPath := filepath.Join(filepath.Dir(outputPath), "subt-zh_CN-ai.srt")
+	normalPath := filepath.Join(outputDir, "demo_P02_second.zh-CN.srt")
+	aiPath := filepath.Join(outputDir, "demo_P02_second.zh-CN-ai.srt")
 	for _, path := range []string{normalPath, aiPath} {
 		info, err := os.Stat(path)
 		if err != nil || info.Size() == 0 {
@@ -407,6 +447,19 @@ func TestExportSubtitleFilesUsesSRTSuffixForAllTracks(t *testing.T) {
 	}
 	if items[0].OutputPath != normalPath || items[1].OutputPath != aiPath {
 		t.Fatalf("unexpected subtitle output paths: %#v", items)
+	}
+}
+
+func TestExportSubtitleFilesTreatsSRTPathAsDirectory(t *testing.T) {
+	outputDir := filepath.Join(t.TempDir(), "subtitles.srt")
+	items := []subtitleCommandItem{
+		{Track: api.SubtitleTrack{Language: "zh-CN"}, Cues: []api.SubtitleCue{{From: 0, To: 1, Content: "normal"}}},
+	}
+	if err := exportSubtitleFiles(outputDir, "demo", items); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(outputDir, "demo.zh-CN.srt")); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -481,6 +534,8 @@ func newSubtitleTestServer(t *testing.T) *httptest.Server {
 	var serverURL string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case "/x/web-interface/view":
+			fmt.Fprint(w, `{"code":0,"data":{"title":"demo"}}`)
 		case "/x/player/pagelist":
 			fmt.Fprint(w, `{"code":0,"data":[{"cid":42}]}`)
 		case "/x/player/v2":

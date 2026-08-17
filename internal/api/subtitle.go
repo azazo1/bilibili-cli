@@ -30,14 +30,24 @@ type SubtitleCue struct {
 }
 
 func (c *Client) GetVideoSubtitleTracks(ctx context.Context, bvid string, cred *Credential) ([]SubtitleTrack, error) {
-	pages, err := c.getVideoPages(ctx, bvid, cred)
+	return c.GetVideoSubtitleTracksForPage(ctx, bvid, 1, cred)
+}
+
+func (c *Client) GetVideoSubtitleTracksForPage(ctx context.Context, bvid string, page int, cred *Credential) ([]SubtitleTrack, error) {
+	if page < 1 {
+		return nil, NewError(CodeInvalidInput, "获取字幕列表", "分P序号必须大于 0")
+	}
+	pages, err := c.GetVideoPages(ctx, bvid, cred)
 	if err != nil {
+		if CodeOf(err) == CodeNotFound {
+			return []SubtitleTrack{}, nil
+		}
 		return nil, err
 	}
-	if len(pages) == 0 {
-		return []SubtitleTrack{}, nil
+	if page > len(pages) {
+		return nil, NewError(CodeNotFound, "获取字幕列表", "分P序号超出范围")
 	}
-	cid := int64Value(pages[0]["cid"], 0)
+	cid := pages[page-1].CID
 	if cid == 0 {
 		return []SubtitleTrack{}, nil
 	}

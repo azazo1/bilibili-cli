@@ -76,7 +76,7 @@ func TestVideoDownloadCommandHierarchy(t *testing.T) {
 func TestReportVideoPagesRequiresExplicitSelection(t *testing.T) {
 	app := newTestApp(t)
 	app.Out = &output.Writer{Stdout: io.Discard, Stderr: io.Discard, DefaultMode: "rich"}
-	err := reportVideoPages(app, "BV1ABcsztEcY", []api.VideoPage{{Page: 1, Title: "first"}, {Page: 2, Title: "second"}}, output.ModeRich)
+	err := reportVideoPages(app, "BV1ABcsztEcY", []api.VideoPage{{Page: 1, Title: "first"}, {Page: 2, Title: "second"}}, "bili video download", output.ModeRich)
 	if api.CodeOf(err) != api.CodeInvalidInput {
 		t.Fatalf("unexpected page selection error: %s", api.CodeOf(err))
 	}

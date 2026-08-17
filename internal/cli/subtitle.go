@@ -20,7 +20,7 @@ type subtitleCommandItem struct {
 }
 
 func newSubtitleCommand(app *App) *cobra.Command {
-	var outputPath string
+	var outputDir string
 	var subtitleIDs, languages []string
 	var subtitleType string
 	var asJSON, asYAML bool
@@ -38,23 +38,34 @@ func newSubtitleCommand(app *App) *cobra.Command {
 			if subtitleType != "all" && subtitleType != "ai" && subtitleType != "non-ai" {
 				return app.invalidInput(cmd, "--type 仅支持 all, ai 或 non-ai", mode)
 			}
-			bvid, err := app.extractBVID(cmd, args[0], mode)
+			reference, err := app.extractVideoReference(cmd, args[0], mode)
 			if err != nil {
 				return err
 			}
 			ctx := contextOrBackground(cmd.Context())
 			credential := app.OptionalCredential(ctx)
-			tracks, err := app.API.GetVideoSubtitleTracks(ctx, bvid, credential)
+			pages, err := app.API.GetVideoPages(ctx, reference.BVID, credential)
+			if err != nil {
+				return app.apiFailure(err, "获取视频分P", mode)
+			}
+			if !reference.PageSpecified && len(pages) > 1 {
+				return reportVideoPages(app, reference.BVID, pages, "bili video st", mode)
+			}
+			if reference.Page > len(pages) {
+				return app.Fail(api.NewError(api.CodeNotFound, "", "分P序号超出范围"), "获取字幕列表", mode)
+			}
+			selectedPage := pages[reference.Page-1]
+			tracks, err := app.API.GetVideoSubtitleTracksForPage(ctx, reference.BVID, reference.Page, credential)
 			if err != nil {
 				return app.apiFailure(err, "获取字幕列表", mode)
 			}
 			availableTrackCount := len(tracks)
 			tracks = filterSubtitleTracks(tracks, subtitleIDs, languages, subtitleType)
-			app.Logger.Info("获取字幕轨道", "bvid", bvid, "available_count", availableTrackCount, "selected_count", len(tracks))
+			app.Logger.Info("获取字幕轨道", "bvid", reference.BVID, "page", reference.Page, "available_count", availableTrackCount, "selected_count", len(tracks))
 			items := make([]subtitleCommandItem, len(tracks))
 			warnings := make([]map[string]string, 0)
 			for index, track := range tracks {
-				app.Logger.Info("下载字幕内容", "bvid", bvid, "index", index+1, "language", track.Language)
+				app.Logger.Info("下载字幕内容", "bvid", reference.BVID, "page", reference.Page, "index", index+1, "language", track.Language)
 				cues, fetchErr := app.API.DownloadSubtitle(ctx, track, credential)
 				items[index] = subtitleCommandItem{Track: track, Cues: cues, FetchErr: fetchErr}
 				if fetchErr != nil {
@@ -62,28 +73,37 @@ func newSubtitleCommand(app *App) *cobra.Command {
 						"code":    "subtitle_download_failed",
 						"message": fmt.Sprintf("字幕 %d 获取失败: %s", index+1, fetchErr),
 					})
-					app.Logger.Warn("获取字幕内容失败", "bvid", bvid, "index", index+1, "error", fetchErr)
+					app.Logger.Warn("获取字幕内容失败", "bvid", reference.BVID, "page", reference.Page, "index", index+1, "error", fetchErr)
 				}
 			}
-			if outputPath != "" {
-				outputPath = expandHome(outputPath)
+			if outputDir != "" {
+				outputDir = expandHome(outputDir)
 				if downloadableSubtitleCount(items) == 0 {
 					return app.Fail(api.NewError(api.CodeNotFound, "", "没有可导出的字幕"), "", mode)
 				}
-				if err := exportSubtitleFiles(outputPath, bvid, items); err != nil {
+				videoTitle := reference.BVID
+				if info, infoErr := app.API.GetVideoInfo(ctx, reference.BVID, credential); infoErr == nil {
+					if title := stringValue(info["title"]); title != "" {
+						videoTitle = title
+					}
+				} else {
+					app.Logger.Warn("获取视频标题失败, 使用 BV 号作为字幕文件名", "bvid", reference.BVID, "error", infoErr)
+				}
+				fileTitle := videoDownloadFileTitle(videoTitle, reference.Page, len(pages), selectedPage.Title)
+				if err := exportSubtitleFiles(outputDir, fileTitle, items); err != nil {
 					return app.Fail(err, "导出字幕文件失败", mode)
 				}
 			}
-			payload := subtitleCommandPayload(bvid, availableTrackCount, items, warnings, outputPath)
+			payload := subtitleCommandPayload(reference.BVID, reference.Page, selectedPage.Title, availableTrackCount, items, warnings, outputDir)
 			return app.CompleteTable(payload, mode, asJSON, asYAML, func(w io.Writer) {
-				renderSubtitleList(app, w, bvid, availableTrackCount, items, outputPath)
+				renderSubtitleList(app, w, reference.BVID, availableTrackCount, items, outputDir)
 			})
 		},
 	}
 	command.Flags().StringSliceVar(&subtitleIDs, "id", nil, "按字幕 ID 筛选, 可重复或逗号分隔")
 	command.Flags().StringSliceVarP(&languages, "language", "l", nil, "按 API lan 筛选, 可重复或逗号分隔")
 	command.Flags().StringVar(&subtitleType, "type", "all", "字幕类型: all, ai 或 non-ai")
-	command.Flags().StringVarP(&outputPath, "output", "o", "", "字幕输出路径, .srt 作为文件名前缀导出多个字幕")
+	command.Flags().StringVarP(&outputDir, "output", "o", "", "字幕输出目录")
 	addStructuredFlags(command, &asJSON, &asYAML)
 	return command
 }
@@ -129,49 +149,23 @@ func normalizeSubtitleLanguage(value string) string {
 	return strings.ReplaceAll(value, "_", "-")
 }
 
-func exportSubtitleFiles(outputPath, bvid string, items []subtitleCommandItem) error {
-	if strings.EqualFold(filepath.Ext(outputPath), ".srt") {
-		return exportSubtitleFilesWithSuffix(outputPath, items)
-	}
-	if err := os.MkdirAll(outputPath, 0o755); err != nil {
+func exportSubtitleFiles(outputDir, videoTitle string, items []subtitleCommandItem) error {
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return err
 	}
-	for index := range items {
-		if items[index].FetchErr != nil {
-			continue
-		}
-		language := sanitizeFileName(items[index].Track.Language)
-		if language == "" {
-			language = "subtitle"
-		}
-		fileName := fmt.Sprintf("%s.%02d.%s.srt", bvid, index+1, language)
-		path := filepath.Join(outputPath, fileName)
-		if err := os.WriteFile(path, []byte(api.FormatSubtitleSRT(items[index].Cues)), 0o644); err != nil {
-			return err
-		}
-		items[index].OutputPath = path
-	}
-	return nil
-}
-
-func exportSubtitleFilesWithSuffix(outputPath string, items []subtitleCommandItem) error {
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
-		return err
-	}
-	extension := filepath.Ext(outputPath)
-	prefix := strings.TrimSuffix(filepath.Base(outputPath), extension)
+	videoTitle = sanitizeFileName(videoTitle)
 	usedNames := map[string]int{}
 	for index := range items {
 		if items[index].FetchErr != nil {
 			continue
 		}
-		name := prefix + "-" + subtitleFileSuffix(items[index].Track)
+		name := videoTitle + "." + subtitleFileSuffix(items[index].Track)
 		key := strings.ToLower(name)
 		usedNames[key]++
 		if usedNames[key] > 1 {
 			name = fmt.Sprintf("%s-%d", name, usedNames[key])
 		}
-		path := filepath.Join(filepath.Dir(outputPath), name+extension)
+		path := filepath.Join(outputDir, name+".srt")
 		if err := os.WriteFile(path, []byte(api.FormatSubtitleSRT(items[index].Cues)), 0o644); err != nil {
 			return err
 		}
@@ -181,10 +175,11 @@ func exportSubtitleFilesWithSuffix(outputPath string, items []subtitleCommandIte
 }
 
 func subtitleFileSuffix(track api.SubtitleTrack) string {
-	language := strings.ReplaceAll(track.Language, "-", "_")
-	language = sanitizeFileName(strings.ReplaceAll(language, " ", "_"))
+	language := strings.TrimSpace(strings.ReplaceAll(track.Language, " ", "_"))
 	if language == "" {
 		language = "subtitle"
+	} else {
+		language = sanitizeFileName(language)
 	}
 	if track.IsAI() {
 		return language + "-ai"
@@ -212,7 +207,7 @@ func downloadableSubtitleCount(items []subtitleCommandItem) int {
 	return count
 }
 
-func subtitleCommandPayload(bvid string, availableTrackCount int, items []subtitleCommandItem, warnings []map[string]string, outputPath string) map[string]any {
+func subtitleCommandPayload(bvid string, page int, partTitle string, availableTrackCount int, items []subtitleCommandItem, warnings []map[string]string, outputDir string) map[string]any {
 	subtitles := make([]map[string]any, 0, len(items))
 	for index, item := range items {
 		track := item.Track
@@ -245,13 +240,15 @@ func subtitleCommandPayload(bvid string, availableTrackCount int, items []subtit
 	}
 	payload := map[string]any{
 		"bvid":                     bvid,
+		"page":                     page,
+		"part_title":               partTitle,
 		"available_subtitle_count": availableTrackCount,
 		"subtitle_count":           len(items),
 		"subtitles":                subtitles,
 		"warnings":                 warnings,
 	}
-	if outputPath != "" {
-		payload["output"] = outputPath
+	if outputDir != "" {
+		payload["output"] = outputDir
 	}
 	return payload
 }
@@ -264,7 +261,7 @@ func subtitleCharacterCount(cues []api.SubtitleCue) int {
 	return count
 }
 
-func renderSubtitleList(app *App, w io.Writer, bvid string, availableTrackCount int, items []subtitleCommandItem, outputPath string) {
+func renderSubtitleList(app *App, w io.Writer, bvid string, availableTrackCount int, items []subtitleCommandItem, outputDir string) {
 	if len(items) == 0 {
 		if availableTrackCount == 0 {
 			fmt.Fprintln(w, "无可用字幕")
@@ -307,10 +304,10 @@ func renderSubtitleList(app *App, w io.Writer, bvid string, availableTrackCount 
 		})
 	}
 	app.renderTable(w, "字幕列表: "+bvid, []string{"#", "ID", "语言", "名称", "类型", "作者", "行数", "状态"}, rows)
-	if outputPath == "" {
+	if outputDir == "" {
 		return
 	}
-	fmt.Fprintf(w, "\n已导出 %d 个字幕文件: %s\n", exportedSubtitleCount(items), outputPath)
+	fmt.Fprintf(w, "\n已导出 %d 个字幕文件: %s\n", exportedSubtitleCount(items), outputDir)
 	for _, item := range items {
 		if item.OutputPath != "" {
 			fmt.Fprintln(w, item.OutputPath)

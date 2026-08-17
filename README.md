@@ -42,10 +42,11 @@ go run ./cmd/bili me --yaml
 ```shell
 go run ./cmd/bili video subtitle BV1ABcsztEcY
 go run ./cmd/bili video subtitle BV1ABcsztEcY --language zh_CN --type non-ai
-go run ./cmd/bili video st BV1ABcsztEcY -o ./subtitles/subt.srt
+go run ./cmd/bili video st BV1ABcsztEcY -o ./subtitles
+go run ./cmd/bili video st "https://www.bilibili.com/video/BV1ABcsztEcY?p=2" -o ./downloads
 ```
 
-`bili video subtitle` 会列出播放器接口返回的所有字幕轨道, 包含 ID, 语言, 字幕类型, AI 标记, 作者和字幕行数. 可通过 `--id`, `--language` 或 `--type all|ai|non-ai` 筛选轨道. `--language` 使用 API 的 `lan`, 并兼容 `zh-CN` 与 `zh_CN` 两种写法. 当 `-o` 指向 `subt.srt` 时, 每条可下载字幕会写为 `subt-<lan>.srt` 或 `subt-<lan>-ai.srt`.
+`bili video subtitle` 会列出播放器接口返回的所有字幕轨道, 包含 ID, 语言, 字幕类型, AI 标记, 作者和字幕行数. 可通过 `--id`, `--language` 或 `--type all|ai|non-ai` 筛选轨道. `--language` 使用 API 的 `lan`, 并兼容 `zh-CN` 与 `zh_CN` 两种写法. `-o` 始终指定输出目录, 字幕会写为 `<视频基名>.<语言>.srt`, 与下载视频共享基名以便播放器自动识别. 多分P视频需通过 URL 的 `?p=N` 选择对应字幕.
 
 ## 视频下载
 

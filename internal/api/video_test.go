@@ -88,6 +88,31 @@ func TestGetVideoSubtitleTracksAndDownload(t *testing.T) {
 	}
 }
 
+func TestGetVideoSubtitleTracksForPage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/x/player/pagelist":
+			fmt.Fprint(w, `{"code":0,"data":[{"cid":41,"part":"first"},{"cid":42,"part":"second"}]}`)
+		case "/x/player/v2":
+			if r.URL.Query().Get("cid") != "42" {
+				t.Fatalf("unexpected cid: %s", r.URL.Query().Get("cid"))
+			}
+			fmt.Fprint(w, `{"code":0,"data":{"subtitle":{"subtitles":[{"id":12,"lan":"zh-CN","subtitle_url":"https://cdn.example/second.json"}]}}}`)
+		default:
+			t.Fatalf("unexpected request path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	client.BaseURL = server.URL
+	client.HTTP = server.Client()
+	tracks, err := client.GetVideoSubtitleTracksForPage(context.Background(), "BV1ABcsztEcY", 2, nil)
+	if err != nil || len(tracks) != 1 || tracks[0].ID != "12" {
+		t.Fatalf("unexpected page subtitle tracks: %#v, %v", tracks, err)
+	}
+}
+
 func TestClientUnwrapsDataAndMapsErrors(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/x/web-interface/view" {

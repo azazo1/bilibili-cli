@@ -45,7 +45,7 @@ func newVideoDownloadCommand(app *App) *cobra.Command {
 					return app.apiFailure(pagesErr, "获取视频分P", mode)
 				}
 				if len(pages) > 1 {
-					return reportVideoPages(app, reference.BVID, pages, mode)
+					return reportVideoPages(app, reference.BVID, pages, "bili video download", mode)
 				}
 			}
 			info, fetchErr := app.API.GetVideoInfo(ctx, reference.BVID, credential)
@@ -171,7 +171,19 @@ func separateStreamPaths(items []videoDownloadItem) (audioPath, videoPath string
 	return audioPath, videoPath
 }
 
-func reportVideoPages(app *App, bvid string, pages []api.VideoPage, mode output.Mode) error {
+func reportVideoPages(app *App, bvid string, pages []api.VideoPage, exampleCommand string, mode output.Mode) error {
+	pageData := make([]map[string]any, 0, len(pages))
+	for _, page := range pages {
+		pageData = append(pageData, map[string]any{"page": page.Page, "title": page.Title, "cid": page.CID})
+	}
+	err := api.NewError(api.CodeInvalidInput, "", "多分P视频必须通过 URL 的 p 参数指定分P")
+	if mode != output.ModeRich {
+		return app.fail(err, "选择分P", mode, map[string]any{
+			"bvid":    bvid,
+			"pages":   pageData,
+			"example": fmt.Sprintf("%s %s?p=2", exampleCommand, bvid),
+		})
+	}
 	fmt.Fprintln(app.Out.Stdout, "该视频包含多个分P, 请先选择要下载的分P:")
 	for _, page := range pages {
 		title := page.Title
@@ -180,8 +192,8 @@ func reportVideoPages(app *App, bvid string, pages []api.VideoPage, mode output.
 		}
 		fmt.Fprintf(app.Out.Stdout, "  P%d: %s\n", page.Page, title)
 	}
-	fmt.Fprintf(app.Out.Stdout, "示例: bili video download %s?p=2\n", bvid)
-	return app.Fail(api.NewError(api.CodeInvalidInput, "", "多分P视频必须通过 URL 的 p 参数指定分P"), "选择分P", mode)
+	fmt.Fprintf(app.Out.Stdout, "示例: %s %s?p=2\n", exampleCommand, bvid)
+	return app.Fail(err, "选择分P", mode)
 }
 
 func videoDownloadFileTitle(title string, page, pageCount int, partTitle string) string {
