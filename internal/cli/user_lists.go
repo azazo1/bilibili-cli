@@ -64,7 +64,7 @@ func newUserListsCommand(app *App) *cobra.Command {
 func resolveUserListsReference(cmd *cobra.Command, app *App, input string, mode output.Mode) (api.UserListReference, error) {
 	input = strings.TrimSpace(input)
 	ctx := contextOrBackground(cmd.Context())
-	if isUserListsURLInput(input) {
+	if isUserReferenceURLInput(input) {
 		reference, err := app.API.ResolveUserListReference(ctx, input)
 		if err != nil {
 			return api.UserListReference{}, app.invalidInput(cmd, err.Error(), mode)
@@ -89,11 +89,6 @@ func resolveUserListsReference(cmd *cobra.Command, app *App, input string, mode 
 		return api.UserListReference{}, app.invalidInput(cmd, err.Error(), mode)
 	}
 	return reference, nil
-}
-
-func isUserListsURLInput(value string) bool {
-	value = strings.ToLower(strings.TrimSpace(value))
-	return strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://") || strings.HasPrefix(value, "b23.tv/")
 }
 
 func splitUserListsInput(value string) (string, string, error) {

@@ -53,6 +53,15 @@ func TestUserVideosTableUsesAppDuration(t *testing.T) {
 	}
 }
 
+func TestResolveUIDAcceptsSpaceURL(t *testing.T) {
+	app := newTestApp(t)
+	command := NewRoot(app)
+	uid, err := resolveUID(command, app, "https://space.bilibili.com/3493112693394137", output.ModeJSON)
+	if err != nil || uid != 3493112693394137 {
+		t.Fatalf("resolveUID() = %d, %v", uid, err)
+	}
+}
+
 func TestUserListsCommandWorksInReadOnlyMode(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/x/polymer/web-space/home/seasons_series" {

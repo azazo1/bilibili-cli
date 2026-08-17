@@ -14,6 +14,14 @@ import (
 )
 
 func resolveUID(cmd *cobra.Command, app *App, input string, mode output.Mode) (int64, error) {
+	input = strings.TrimSpace(input)
+	if isUserReferenceURLInput(input) {
+		reference, err := app.API.ResolveUserListReference(contextOrBackground(cmd.Context()), input)
+		if err != nil {
+			return 0, app.invalidInput(cmd, err.Error(), mode)
+		}
+		return reference.OwnerID, nil
+	}
 	if parsed, err := strconv.ParseInt(input, 10, 64); err == nil && parsed > 0 {
 		return parsed, nil
 	}
@@ -31,10 +39,15 @@ func resolveUID(cmd *cobra.Command, app *App, input string, mode output.Mode) (i
 	return uid, nil
 }
 
+func isUserReferenceURLInput(value string) bool {
+	value = strings.ToLower(strings.TrimSpace(value))
+	return strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://") || strings.HasPrefix(value, "b23.tv/")
+}
+
 func newUserCommand(app *App) *cobra.Command {
 	var asJSON, asYAML bool
 	command := &cobra.Command{
-		Use:     "user UID_OR_NAME",
+		Use:     "user UID_OR_NAME_OR_URL",
 		Aliases: []string{"up"},
 		Short:   "查看 UP 主资料",
 		Args:    cobra.ExactArgs(1),
@@ -76,7 +89,7 @@ func newUserVideosCommand(app *App) *cobra.Command {
 	var count int
 	var asJSON, asYAML bool
 	command := &cobra.Command{
-		Use:   "video UID_OR_NAME",
+		Use:   "video UID_OR_NAME_OR_URL",
 		Short: "查看 UP 主的视频列表",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
