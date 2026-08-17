@@ -34,9 +34,10 @@ func resolveUID(cmd *cobra.Command, app *App, input string, mode output.Mode) (i
 func newUserCommand(app *App) *cobra.Command {
 	var asJSON, asYAML bool
 	command := &cobra.Command{
-		Use:   "user UID_OR_NAME",
-		Short: "查看 UP 主资料",
-		Args:  cobra.ExactArgs(1),
+		Use:     "user UID_OR_NAME",
+		Aliases: []string{"up"},
+		Short:   "查看 UP 主资料",
+		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			mode, err := app.mode(cmd, asJSON, asYAML)
 			if err != nil {
