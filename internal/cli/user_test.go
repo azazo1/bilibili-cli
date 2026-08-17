@@ -3,6 +3,8 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -48,6 +50,102 @@ func TestUserVideosTableUsesAppDuration(t *testing.T) {
 	result := stdout.String()
 	if !strings.Contains(result, "\t发布时间\t") || !strings.Contains(result, "\t2024-01-02 03:04\t02:05\t") {
 		t.Fatalf("duration or published time was not rendered from app response: %q", result)
+	}
+}
+
+func TestUserListsCommandWorksInReadOnlyMode(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/x/polymer/web-space/home/seasons_series" {
+			t.Fatalf("unexpected path: %s", request.URL.Path)
+		}
+		fmt.Fprint(writer, `{"code":0,"data":{"items_lists":{"page":{"page_num":1,"page_size":10,"total":1},"seasons_list":[{"meta":{"mid":42,"season_id":7,"title":"season","total":2}}],"series_list":[{"meta":{"mid":42,"series_id":9,"name":"series","total":3}}]}}}`)
+	}))
+	defer server.Close()
+
+	app := newTestApp(t)
+	app.Config.Safety.ReadOnly = true
+	app.API.BaseURL = server.URL
+	app.API.HTTP = server.Client()
+	stdout := &bytes.Buffer{}
+	app.Out = &output.Writer{Stdout: stdout, Stderr: &bytes.Buffer{}, DefaultMode: "rich"}
+	root := NewRoot(app)
+	root.SetArgs([]string{"user", "lists", "42", "--json"})
+	if err := root.ExecuteContext(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	data := envelope["data"].(map[string]any)
+	items := data["items"].([]any)
+	if len(items) != 2 || data["owner"].(map[string]any)["id"] != "42" {
+		t.Fatalf("unexpected directory payload: %#v", data)
+	}
+	if _, ok := items[0].(map[string]any)["kind"]; ok {
+		t.Fatalf("list type leaked into payload: %#v", items[0])
+	}
+}
+
+func TestUserListsCommandLoadsSelectedList(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/x/polymer/web-space/home/seasons_series":
+			fmt.Fprint(writer, `{"code":0,"data":{"items_lists":{"page":{"page_num":1,"page_size":10,"total":1},"seasons_list":[{"meta":{"mid":42,"season_id":7,"title":"list","total":1}}],"series_list":[]}}}`)
+		case "/x/polymer/web-space/seasons_archives_list":
+			query := request.URL.Query()
+			if query.Get("mid") != "42" || query.Get("season_id") != "7" || query.Get("page_num") != "1" || query.Get("page_size") != "30" || query.Get("sort_reverse") != "false" {
+				t.Fatalf("unexpected season query: %s", request.URL.RawQuery)
+			}
+			fmt.Fprint(writer, `{"code":0,"data":{"meta":{"mid":42,"season_id":7,"title":"list","total":1},"page":{"page_num":1,"page_size":30,"total":1},"archives":[{"bvid":"BV1ABcsztEcY","title":"video","duration":60,"stat":{"view":8}}]}}`)
+		default:
+			t.Fatalf("unexpected path: %s", request.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	app := newTestApp(t)
+	app.Config.Safety.ReadOnly = true
+	app.API.BaseURL = server.URL
+	app.API.HTTP = server.Client()
+	stdout := &bytes.Buffer{}
+	app.Out = &output.Writer{Stdout: stdout, Stderr: &bytes.Buffer{}, DefaultMode: "rich"}
+	root := NewRoot(app)
+	root.SetArgs([]string{"user", "lists", "42/7", "--json"})
+	if err := root.ExecuteContext(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	data := envelope["data"].(map[string]any)
+	items := data["items"].([]any)
+	if data["id"] != "7" || len(items) != 1 || items[0].(map[string]any)["bvid"] != "BV1ABcsztEcY" {
+		t.Fatalf("unexpected list payload: %#v", data)
+	}
+	if _, ok := data["kind"]; ok {
+		t.Fatalf("list type leaked into payload: %#v", data)
+	}
+}
+
+func TestUserListsCommandValidatesPage(t *testing.T) {
+	app := newTestApp(t)
+	stdout := &bytes.Buffer{}
+	app.Out = &output.Writer{Stdout: stdout, Stderr: &bytes.Buffer{}, DefaultMode: "rich"}
+	root := NewRoot(app)
+	root.SetArgs([]string{"user", "lists", "42", "--page", "0", "--json"})
+	err := root.ExecuteContext(context.Background())
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != 1 {
+		t.Fatalf("unexpected command error: %v", err)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope["error"].(map[string]any)["code"] != string(api.CodeInvalidInput) {
+		t.Fatalf("unexpected error payload: %#v", envelope)
 	}
 }
 

@@ -6,7 +6,7 @@
 
 - 视频详情, AI 总结, 评论和相关推荐.
 - 字幕轨道列出与导出, 覆盖普通字幕和平台标记的 AI 字幕.
-- UP 主资料, 视频列表, 专栏, 视频, 用户, 番剧, 直播和影视搜索.
+- UP 主资料, 视频列表, 合集和系列列表, 专栏, 视频, 用户, 番剧, 直播和影视搜索.
 - 热门视频, 排行榜, 收藏夹, 关注, 历史和稍后再看.
 - 动态时间线, 我的动态, 文字动态发布和删除.
 - 点赞, 投币, 一键三连和取消关注.
@@ -79,6 +79,17 @@ bili video download BV1ABcsztEcY --with-srt
 
 多分P视频必须在 URL 中指定 `?p=N`. 未指定时会列出所有分P及其标题, 不会下载第一P. 文件名会包含 `P` 序号和该分P的标题. `--with-srt` 会尝试选择并保存一条字幕, 优先中文, 同语言优先人工字幕, 其次 AI, 再按英文和其他语言兜底. 交互终端会显示下载进度条. `--audio-only` 和 `--video-only` 不能同时使用.
 
+## 用户列表
+
+```shell
+bili user lists 7855491
+bili user lists 7855491/8565435
+bili user lists "https://space.bilibili.com/7855491/lists?sid=8565435"
+bili user lists https://b23.tv/example
+```
+
+`bili user lists UID` 显示该 UP 主的全部列表. 传入 `UID/SID` 或 Bilibili 空间列表链接时, 会显示指定列表中的视频. 可以传入 b23 短链, 命令会跟随跳转后解析. `--page` 在 UID 查询时翻阅列表目录, 在指定列表查询时翻阅视频. 命令会自动识别 Bilibili 列表类型并使用统一输出.
+
 ## 图片下载
 
 ```shell
@@ -93,7 +104,7 @@ bili image live 5440 --with-avatar
 
 用户下载头像, 其他对象默认下载封面. `--with-avatar` 会额外下载作者或主播头像. 资源保存为稳定 ID 文件名, 例如 `video-BV1ABcsztEcY-cover.jpg`. 同名文件会直接覆盖. 主图下载成功后, 作者头像不可用只会报告警告而不会删除主图. 可使用 `--json` 或 `--yaml` 输出下载路径, 字节数和警告. 图片下载仅使用读取请求, 在 `safety.read_only = true` 下可用.
 
-其他命令按领域组织在 `bili me`, `bili user`, `bili video` 和 `bili dynamic` 下. 例如 `bili user video UID_OR_NAME`, `bili user follow UID`, `bili me fav`, `bili video watch` 和 `bili dynamic post TEXT`.
+其他命令按领域组织在 `bili me`, `bili user`, `bili video` 和 `bili dynamic` 下. 例如 `bili user video UID_OR_NAME`, `bili user lists UID`, `bili user follow UID`, `bili me fav`, `bili video watch` 和 `bili dynamic post TEXT`.
 
 配置和认证默认保存在 `~/.config/bilibili-cli/config.toml` 与 `~/.config/bilibili-cli/auth.json`. 如需从已有 cookie 导入, 可以传入 `BILI_COOKIE` 或 Netscape cookie 文件路径 `BILI_COOKIE_FILE`.
 

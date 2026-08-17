@@ -67,7 +67,7 @@ func newUserCommand(app *App) *cobra.Command {
 		},
 	}
 	addStructuredFlags(command, &asJSON, &asYAML)
-	command.AddCommand(newUserVideosCommand(app))
+	command.AddCommand(newUserVideosCommand(app), newUserListsCommand(app))
 	command.AddCommand(newUserInteractionCommands(app)...)
 	return command
 }

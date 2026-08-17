@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -127,29 +126,10 @@ func (c *Client) resolveImageInput(ctx context.Context, value string) (string, b
 }
 
 func (c *Client) resolveB23URL(ctx context.Context, value string) (string, bool, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, value, nil)
+	finalURL, err := c.resolveB23Target(ctx, value)
 	if err != nil {
-		return "", false, NewError(CodeInvalidInput, "", "b23 短链无法解析")
+		return "", false, err
 	}
-	if c.UserAgent != "" {
-		req.Header.Set("User-Agent", c.UserAgent)
-	}
-	httpClient := c.HTTP
-	if httpClient == nil {
-		httpClient = http.DefaultClient
-	}
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return "", false, &Error{Code: CodeNetwork, Action: "解析 b23 短链", Message: err.Error(), Err: err}
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
-		return "", false, NewError(CodeNetwork, "解析 b23 短链", fmt.Sprintf("HTTP %d", resp.StatusCode))
-	}
-	if resp.Request == nil || resp.Request.URL == nil {
-		return "", false, NewError(CodeUpstream, "解析 b23 短链", "短链响应缺少最终地址")
-	}
-	finalURL := resp.Request.URL
 	if !isBilibiliImagePageHost(strings.ToLower(finalURL.Hostname())) {
 		return "", false, NewError(CodeInvalidInput, "", "b23 短链未跳转到受支持的 Bilibili 资源页面")
 	}

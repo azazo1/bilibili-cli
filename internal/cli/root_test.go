@@ -624,6 +624,7 @@ func TestCommandHierarchyUsesDomainParents(t *testing.T) {
 		{"video", "hot"},
 		{"video", "watch"},
 		{"user", "video"},
+		{"user", "lists"},
 		{"user", "follow"},
 		{"dynamic", "post"},
 		{"dynamic", "delete"},
@@ -639,6 +640,9 @@ func TestCommandHierarchyUsesDomainParents(t *testing.T) {
 	}
 	if _, _, err := root.Find([]string{"whoami"}); err == nil {
 		t.Fatal("legacy whoami command is still registered")
+	}
+	if _, _, err := root.Find([]string{"lists"}); err == nil {
+		t.Fatal("root lists command is unexpectedly registered")
 	}
 }
 
