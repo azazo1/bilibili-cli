@@ -124,10 +124,28 @@ func (c *Client) search(ctx context.Context, keyword, searchType string, page in
 		"keyword":     []string{keyword},
 		"search_type": []string{searchType},
 		"page":        []string{fmt.Sprintf("%d", page)},
+		"page_size":   []string{"20"},
+		"platform":    []string{"pc"},
+		"web_location": []string{"1430654"},
 	}
+	requestCredential := c.credentialWithDevice(ctx, nil)
 	var data map[string]any
-	if err := c.request(ctx, http.MethodGet, "/x/web-interface/search/type", query, nil, c.credentialWithDevice(ctx, nil), &data); err != nil {
-		return nil, withAction(action, err)
+	var requestErr error
+	if signed, signErr := c.signWBI(ctx, query, requestCredential); signErr == nil {
+		requestErr = c.request(ctx, http.MethodGet, "/x/web-interface/wbi/search/type", signed, nil, requestCredential, &data)
+	} else {
+		requestErr = signErr
+	}
+	if requestErr != nil {
+		fallbackQuery := url.Values{
+			"keyword":     []string{keyword},
+			"search_type": []string{searchType},
+			"page":        []string{fmt.Sprintf("%d", page)},
+		}
+		requestErr = c.request(ctx, http.MethodGet, "/x/web-interface/search/type", fallbackQuery, nil, requestCredential, &data)
+	}
+	if requestErr != nil {
+		return nil, withAction(action, requestErr)
 	}
 	return mapList(mapValue(data)["result"]), nil
 }

@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -45,20 +44,21 @@ func TestPostTextDynamicUsesSignedJSONRequest(t *testing.T) {
 	}
 }
 
-func TestDeleteDynamicUsesVCAPI(t *testing.T) {
+func TestDeleteDynamicUsesWebAPI(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/dynamic_svr/v1/dynamic_svr/rm_dynamic" {
+		if r.URL.Path != "/x/dynamic/feed/operate/remove" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
 		body, _ := io.ReadAll(r.Body)
-		values, _ := url.ParseQuery(string(body))
-		if values.Get("dynamic_id") != "123" || values.Get("csrf") != "csrf" {
-			t.Fatalf("unexpected form: %s", strings.TrimSpace(string(body)))
+		var payload map[string]any
+		if r.URL.Query().Get("platform") != "web" || r.URL.Query().Get("csrf") != "csrf" || json.Unmarshal(body, &payload) != nil || payload["dyn_id_str"] != "123" {
+			t.Fatalf("unexpected request: %s", strings.TrimSpace(string(body)))
 		}
 		fmt.Fprint(w, `{"code":0,"data":null}`)
 	}))
 	defer server.Close()
 	client := NewClient()
+	client.BaseURL = server.URL
 	client.VCBaseURL = server.URL
 	client.HTTP = server.Client()
 	client.device = &Credential{Buvid3: "b3", Buvid4: "b4"}
@@ -68,4 +68,3 @@ func TestDeleteDynamicUsesVCAPI(t *testing.T) {
 		t.Fatal(err)
 	}
 }
-

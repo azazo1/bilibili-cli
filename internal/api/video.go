@@ -95,7 +95,7 @@ func (c *Client) GetVideoSubtitle(ctx context.Context, bvid string, cred *Creden
 		return SubtitleResult{}, &Error{Code: CodeNetwork, Action: "下载字幕", Message: err.Error(), Err: err}
 	}
 	var payload map[string]any
-	if err := json.Unmarshal(raw, &payload); err != nil {
+	if err := decodeJSON(raw, &payload); err != nil {
 		return SubtitleResult{}, &Error{Code: CodeNetwork, Action: "下载字幕", Message: err.Error(), Err: err}
 	}
 	items := mapList(payload["body"])
@@ -194,6 +194,10 @@ func float64Value(value any, fallback float64) float64 {
 		return float64(typed)
 	case int64:
 		return float64(typed)
+	case json.Number:
+		if parsed, err := typed.Float64(); err == nil {
+			return parsed
+		}
 	case string:
 		var parsed float64
 		if _, err := fmt.Sscanf(typed, "%f", &parsed); err == nil {
@@ -221,4 +225,3 @@ func formatSRTTime(seconds float64) string {
 	remaining := seconds - float64(hours*3600+minutes*60)
 	return strings.Replace(fmt.Sprintf("%02d:%02d:%06.3f", hours, minutes, remaining), ".", ",", 1)
 }
-

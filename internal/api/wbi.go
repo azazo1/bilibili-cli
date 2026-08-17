@@ -5,7 +5,6 @@ import (
 	cryptorand "crypto/rand"
 	"crypto/md5"
 	"encoding/hex"
-	"encoding/json"
 	"net/url"
 	"path"
 	"regexp"
@@ -84,7 +83,7 @@ func (c *Client) wbiMixinKey(ctx context.Context, credential *Credential) (strin
 	var payload struct {
 		Data map[string]any `json:"data"`
 	}
-	if err := json.Unmarshal(raw, &payload); err != nil {
+	if err := decodeJSON(raw, &payload); err != nil {
 		return "", NewError(CodeUpstream, "获取 WBI 密钥", "WBI 密钥响应不是有效 JSON")
 	}
 	images := mapValue(mapValue(payload.Data)["wbi_img"])

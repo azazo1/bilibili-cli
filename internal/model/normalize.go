@@ -52,6 +52,10 @@ func ToInt64(value any, fallback int64) int64 {
 		return typed
 	case float64:
 		return int64(typed)
+	case json.Number:
+		if parsed, err := typed.Int64(); err == nil {
+			return parsed
+		}
 	case string:
 		if parsed, err := strconv.ParseInt(strings.TrimSpace(typed), 10, 64); err == nil {
 			return parsed
@@ -70,6 +74,10 @@ func ToFloat(value any, fallback float64) float64 {
 		return float64(typed)
 	case int64:
 		return float64(typed)
+	case json.Number:
+		if parsed, err := typed.Float64(); err == nil {
+			return parsed
+		}
 	case string:
 		if parsed, err := strconv.ParseFloat(strings.TrimSpace(typed), 64); err == nil {
 			return parsed

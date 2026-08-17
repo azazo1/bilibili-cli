@@ -159,10 +159,16 @@ func (c *Client) requestWithBody(ctx context.Context, method, path string, query
 	if out == nil || len(env.Data) == 0 || string(env.Data) == "null" {
 		return nil
 	}
-	if err := json.Unmarshal(env.Data, out); err != nil {
+	if err := decodeJSON(env.Data, out); err != nil {
 		return &Error{Code: CodeUpstream, Message: "响应数据格式异常", Err: err}
 	}
 	return nil
+}
+
+func decodeJSON(data []byte, out any) error {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	return decoder.Decode(out)
 }
 
 func (c *Client) rawJSON(ctx context.Context, path string, query url.Values, cred *Credential) (json.RawMessage, error) {

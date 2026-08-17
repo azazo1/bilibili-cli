@@ -127,7 +127,12 @@ func (c *Client) PostTextDynamic(ctx context.Context, text string, cred *Credent
 		return nil, NewError(CodeInvalidInput, "发布动态", "文本不能为空")
 	}
 	requestCredential := c.credentialWithDevice(ctx, cred)
-	query, err := c.signWBI(ctx, url.Values{"csrf": []string{cred.BiliJct}}, requestCredential)
+	query, err := c.signWBI(ctx, url.Values{
+		"platform":                   []string{"web"},
+		"csrf":                       []string{cred.BiliJct},
+		"x-bili-device-req-json":     []string{`{"platform":"web","device":"pc"}`},
+		"x-bili-web-req-json":        []string{`{"spm_id":"333.999"}`},
+	}, requestCredential)
 	if err != nil {
 		return nil, withAction("发布动态", err)
 	}
@@ -152,12 +157,20 @@ func (c *Client) DeleteDynamic(ctx context.Context, dynamicID int64, cred *Crede
 	if err := requireCredential("删除动态", cred, true); err != nil {
 		return err
 	}
+	requestCredential := c.credentialWithDevice(ctx, cred)
+	query := url.Values{"platform": []string{"web"}, "csrf": []string{cred.BiliJct}}
+	webBody := map[string]any{"dyn_id_str": fmt.Sprintf("%d", dynamicID)}
+	if err := c.requestJSON(ctx, http.MethodPost, "/x/dynamic/feed/operate/remove", query, webBody, requestCredential, nil); err == nil {
+		return nil
+	} else if c.Logger != nil {
+		c.Logger.Debug("新版动态删除接口失败, 回退到兼容接口", "dynamic_id", dynamicID, "error", err)
+	}
 	form := url.Values{
 		"dynamic_id": []string{fmt.Sprintf("%d", dynamicID)},
 		"csrf":       []string{cred.BiliJct},
 		"csrf_token": []string{cred.BiliJct},
 	}
-	if err := c.request(ctx, http.MethodPost, c.VCURL("/dynamic_svr/v1/dynamic_svr/rm_dynamic"), nil, form, c.credentialWithDevice(ctx, cred), nil); err != nil {
+	if err := c.request(ctx, http.MethodPost, c.VCURL("/dynamic_svr/v1/dynamic_svr/rm_dynamic"), nil, form, requestCredential, nil); err != nil {
 		return withAction("删除动态", err)
 	}
 	return nil
