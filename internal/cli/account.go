@@ -74,6 +74,7 @@ func newWhoamiCommand(app *App) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "me",
 		Short: "查看当前登录用户",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			mode, err := app.mode(cmd, asJSON, asYAML)
 			if err != nil {

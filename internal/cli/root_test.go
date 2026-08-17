@@ -429,6 +429,24 @@ func TestCommandHierarchyUsesDomainParents(t *testing.T) {
 	}
 }
 
+func TestMeRejectsUnknownPositionalArgument(t *testing.T) {
+	app := newTestApp(t)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	app.Out = &output.Writer{Stdout: stdout, Stderr: stderr, DefaultMode: "rich"}
+	root := NewRoot(app)
+	root.SetArgs([]string{"me", "video"})
+	err := root.ExecuteContext(context.Background())
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != 1 {
+		t.Fatalf("unexpected command error: %v", err)
+	}
+	result := stderr.String()
+	if !strings.Contains(result, "unknown command \"video\" for \"bili me\"") || !strings.Contains(result, "Usage:\n  bili me [flags]") {
+		t.Fatalf("me argument error did not include usage: %q", result)
+	}
+}
+
 func newSubtitleTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	var serverURL string
