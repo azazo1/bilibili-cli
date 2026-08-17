@@ -37,6 +37,14 @@ go run ./cmd/bili me --yaml
 
 扫码登录会同时保存 Web Cookie, App access token 和 refresh token. 升级到此版本后, 请重新执行一次 `bili me login` 以启用 App 请求路径.
 
+手机号短信登录:
+
+```shell
+go run ./cmd/bili me login --phone 13800138000
+```
+
+命令会发送短信并交互读取验证码. 也可以使用 `--code` 传入验证码, 使用 `--country-code` 指定国家区号, 默认值为 `86`. 如果 Bilibili 返回人机验证地址, 请先完成验证并按提示提供验证码参数.
+
 ## 字幕
 
 ```shell

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 )
@@ -24,6 +25,7 @@ type Error struct {
 	Message   string
 	HTTPStatus int
 	APIStatus int
+	Data       json.RawMessage
 	Err       error
 }
 
@@ -63,4 +65,3 @@ func IsAuth(err error) bool {
 	var apiErr *Error
 	return errors.As(err, &apiErr) && apiErr.Code == CodeNotAuthenticated
 }
-

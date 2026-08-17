@@ -44,6 +44,9 @@ type Client struct {
 	deviceMu        sync.Mutex
 	device          *Credential
 	deviceExpires   time.Time
+	passportMu       sync.Mutex
+	passportBuvid    string
+	passportDeviceID string
 	webIDMu         sync.Mutex
 	webIDs          map[int64]webIDEntry
 }
@@ -258,7 +261,9 @@ func (c *Client) requestWithBodyOnce(ctx context.Context, method, requestURL str
 		return &Error{Code: CodeUpstream, HTTPStatus: resp.StatusCode, Message: "响应不是有效 JSON", Err: err}
 	}
 	if env.Code != nil && *env.Code != 0 {
-		return mapAPIError(*env.Code, env.Message)
+		apiErr := mapAPIError(*env.Code, env.Message)
+		apiErr.Data = append(json.RawMessage(nil), env.Data...)
+		return apiErr
 	}
 	if out == nil || len(env.Data) == 0 || string(env.Data) == "null" {
 		return nil

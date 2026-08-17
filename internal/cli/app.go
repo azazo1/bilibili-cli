@@ -23,6 +23,7 @@ type App struct {
 	ConfigStore *config.Store
 	ConfigErr   error
 	Out         *output.Writer
+	In          io.Reader
 	Logger      *slog.Logger
 }
 
@@ -46,6 +47,7 @@ func NewApp() *App {
 		ConfigStore: configStore,
 		ConfigErr:   configErr,
 		Out:         out,
+		In:          os.Stdin,
 		Logger:      logger,
 	}
 }

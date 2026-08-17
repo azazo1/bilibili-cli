@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -13,16 +14,68 @@ import (
 )
 
 func newAccountCommands(app *App) []*cobra.Command {
+	var phone, code, captchaKey string
+	var captchaToken, captchaValidate, captchaSeccode, captchaChallenge, captcha string
+	var countryCode int
+	var sms, asJSON, asYAML bool
 	login := &cobra.Command{
-		Use:   "login",
-		Short: "扫码登录 Bilibili",
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			if _, err := app.Auth.QRLogin(contextOrBackground(cmd.Context()), app.Out.Stdout); err != nil {
-				return app.Fail(err, "登录失败", output.ModeRich)
+		Use:     "login [sms]",
+		Aliases: []string{"sms-login"},
+		Short:   "扫码或手机号短信登录 Bilibili",
+		Args:    cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			useSMS := sms || strings.TrimSpace(phone) != "" || strings.TrimSpace(code) != ""
+			if len(args) == 1 {
+				if !strings.EqualFold(args[0], "sms") && !strings.EqualFold(args[0], "phone") {
+					return app.invalidInput(cmd, "登录方式仅支持 sms", output.ModeRich)
+				}
+				useSMS = true
 			}
-			return nil
+			if !useSMS {
+				if _, err := app.Auth.QRLogin(contextOrBackground(cmd.Context()), app.Out.Stdout); err != nil {
+					return app.Fail(err, "登录失败", output.ModeRich)
+				}
+				return nil
+			}
+			mode, err := app.mode(cmd, asJSON, asYAML)
+			if err != nil {
+				return err
+			}
+			interactionOut := app.Out.Stdout
+			if mode != output.ModeRich {
+				interactionOut = app.Out.Stderr
+			}
+			if interactionOut == nil {
+				interactionOut = io.Discard
+			}
+			credential, loginErr := app.Auth.SMSLogin(contextOrBackground(cmd.Context()), auth.SMSLoginOptions{
+				Phone:            phone,
+				CountryCode:      countryCode,
+				Code:             code,
+				CaptchaKey:       captchaKey,
+				CaptchaToken:     captchaToken,
+				CaptchaValidate:  captchaValidate,
+				CaptchaSeccode:   captchaSeccode,
+				CaptchaChallenge: captchaChallenge,
+				Captcha:          captcha,
+			}, app.In, interactionOut)
+			if loginErr != nil {
+				return app.Fail(loginErr, "短信登录失败", mode)
+			}
+			return app.Complete(map[string]any{"authenticated": true, "access_key": credential.AccessKey != ""}, mode, nil)
 		},
 	}
+	login.Flags().StringVar(&phone, "phone", "", "手机号")
+	login.Flags().IntVarP(&countryCode, "country-code", "c", 86, "国家区号")
+	login.Flags().StringVar(&code, "code", "", "短信验证码")
+	login.Flags().StringVar(&captchaKey, "captcha-key", "", "短信验证码请求返回的 captcha_key")
+	login.Flags().StringVar(&captchaToken, "captcha-token", "", "人机验证 token")
+	login.Flags().StringVar(&captchaValidate, "captcha-validate", "", "极验 validate")
+	login.Flags().StringVar(&captchaSeccode, "captcha-seccode", "", "极验 seccode")
+	login.Flags().StringVar(&captchaChallenge, "captcha-challenge", "", "极验 challenge")
+	login.Flags().StringVar(&captcha, "captcha", "", "图形验证码")
+	login.Flags().BoolVar(&sms, "sms", false, "使用手机号短信登录")
+	addStructuredFlags(login, &asJSON, &asYAML)
 	logout := &cobra.Command{
 		Use:   "logout",
 		Short: "注销并清除保存的凭证",
