@@ -38,7 +38,7 @@ go run ./cmd/bili status --yaml
 
 ## 配置
 
-首次保存认证凭证时会创建 `config.toml`. 根目录的 [`config.toml.example`](./config.toml.example) 可作为手动创建配置的模板.
+使用 `bili config init` 创建默认 `config.toml`. 根目录的 [`config.toml.example`](./config.toml.example) 可作为手动创建配置的模板.
 
 ```toml
 version = 1

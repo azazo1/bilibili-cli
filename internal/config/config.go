@@ -71,6 +71,9 @@ type Store struct {
 }
 
 func NewStore() *Store {
+	if dir := strings.TrimSpace(os.Getenv("BILI_CONFIG_DIR")); dir != "" {
+		return &Store{Dir: dir, File: filepath.Join(dir, "config.toml")}
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		home = "."

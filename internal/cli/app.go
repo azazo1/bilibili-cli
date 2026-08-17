@@ -29,20 +29,13 @@ type App struct {
 func NewApp() *App {
 	logger := slog.Default()
 	configStore := config.NewStore()
-	configPresent := configStore.Exists()
 	settings, configErr := configStore.Load()
 	if configErr != nil {
 		settings = config.Default()
 	}
 	client := api.NewClient()
-	if configPresent {
-		client.SetTimeout(settings.Network.TimeoutSeconds)
-	}
+	client.SetTimeout(settings.Network.TimeoutSeconds)
 	store := auth.NewStore(client)
-	store.PrepareSave = func() error {
-		_, err := configStore.Ensure()
-		return err
-	}
 	store.Logger = logger
 	out := output.NewWriter()
 	out.DefaultMode = settings.Output.Format

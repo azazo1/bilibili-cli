@@ -8,15 +8,23 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/azazo1/bilibili-cli/internal/api"
 	"github.com/azazo1/bilibili-cli/internal/output"
 )
 
+func newTestApp(t *testing.T) *App {
+	t.Helper()
+	t.Setenv("BILI_CONFIG_DIR", t.TempDir())
+	return NewApp()
+}
+
 func TestVideoInvalidBVIDEmitsStructuredError(t *testing.T) {
-	app := NewApp()
+	app := newTestApp(t)
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 	app.Out = &output.Writer{Stdout: stdout, Stderr: stderr}
@@ -49,7 +57,7 @@ func TestHotCommandUsesNormalizedEnvelope(t *testing.T) {
 	}))
 	defer server.Close()
 
-	app := NewApp()
+	app := newTestApp(t)
 	app.API.BaseURL = server.URL
 	app.API.HTTP = server.Client()
 	stdout := &bytes.Buffer{}
@@ -72,7 +80,7 @@ func TestHotCommandUsesNormalizedEnvelope(t *testing.T) {
 }
 
 func TestReadOnlyBlocksAccountWriteCommands(t *testing.T) {
-	app := NewApp()
+	app := newTestApp(t)
 	app.Config.Safety.ReadOnly = true
 	stdout := &bytes.Buffer{}
 	app.Out = &output.Writer{Stdout: stdout, Stderr: &bytes.Buffer{}}
@@ -94,7 +102,7 @@ func TestReadOnlyBlocksAccountWriteCommands(t *testing.T) {
 }
 
 func TestReadOnlyAllowsLogout(t *testing.T) {
-	app := NewApp()
+	app := newTestApp(t)
 	app.Config.Safety.ReadOnly = true
 	tempDir := t.TempDir()
 	app.Auth.Dir = tempDir
@@ -108,5 +116,30 @@ func TestReadOnlyAllowsLogout(t *testing.T) {
 	}
 	if stdout.Len() == 0 {
 		t.Fatal("logout did not render completion")
+	}
+}
+
+func TestNewAppAppliesDefaultTimeoutWithoutCreatingConfig(t *testing.T) {
+	configDir := t.TempDir()
+	t.Setenv("BILI_CONFIG_DIR", configDir)
+	t.Setenv("BILI_HTTP_TIMEOUT", "7")
+	app := NewApp()
+	if app.API.HTTP.Timeout != 30*time.Second {
+		t.Fatalf("timeout = %s", app.API.HTTP.Timeout)
+	}
+	if _, err := os.Stat(filepath.Join(configDir, "config.toml")); !os.IsNotExist(err) {
+		t.Fatalf("NewApp created config file: %v", err)
+	}
+}
+
+func TestConfigInitCreatesDefaultFile(t *testing.T) {
+	app := newTestApp(t)
+	root := NewRoot(app)
+	root.SetArgs([]string{"config", "init"})
+	if err := root.ExecuteContext(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(app.ConfigStore.File); err != nil {
+		t.Fatalf("config init did not create config file: %v", err)
 	}
 }

@@ -15,9 +15,9 @@ func NewRoot(app *App) *cobra.Command {
 		Version:       Version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		PersistentPreRunE: func(_ *cobra.Command, _ []string) error {
+		PersistentPreRunE: func(command *cobra.Command, _ []string) error {
 			app.setupLogging(verbose)
-			if app.ConfigErr != nil {
+			if app.ConfigErr != nil && command.CommandPath() != "bili config init" {
 				return app.Fail(api.NewError(api.CodeInvalidInput, "", "加载 config.toml 失败: "+app.ConfigErr.Error()), "", output.ModeRich)
 			}
 			return nil
@@ -28,6 +28,7 @@ func NewRoot(app *App) *cobra.Command {
 		newAccountCommands(app)...,
 	)
 	root.AddCommand(newVideoCommand(app), newUserCommand(app), newUserVideosCommand(app), newSearchCommand(app))
+	root.AddCommand(newConfigCommand(app))
 	root.AddCommand(newCollectionCommands(app)...)
 	root.AddCommand(newHotCommand(app), newRankCommand(app))
 	root.AddCommand(newInteractionCommands(app)...)

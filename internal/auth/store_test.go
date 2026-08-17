@@ -51,22 +51,3 @@ func TestWriteModeKeepsReadOnlySavedCredential(t *testing.T) {
 		t.Fatalf("read-only credential was lost: %#v, %v", saved, loadErr)
 	}
 }
-
-func TestSaveRunsStoragePreparationHook(t *testing.T) {
-	dir := t.TempDir()
-	prepared := false
-	store := &Store{
-		Dir:  dir,
-		File: filepath.Join(dir, "auth.json"),
-		PrepareSave: func() error {
-			prepared = true
-			return nil
-		},
-	}
-	if err := store.Save(&api.Credential{Sessdata: "session"}); err != nil {
-		t.Fatal(err)
-	}
-	if !prepared {
-		t.Fatal("Save did not prepare shared storage")
-	}
-}
