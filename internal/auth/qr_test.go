@@ -6,9 +6,12 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/azazo1/bilibili-cli/internal/api"
+	"github.com/skip2/go-qrcode"
 )
 
 func TestQRLoginUsesPassportHostForGenerateAndPoll(t *testing.T) {
@@ -41,5 +44,27 @@ func TestQRLoginUsesPassportHostForGenerateAndPoll(t *testing.T) {
 	}
 	if generateRequests != 1 || pollRequests != 1 {
 		t.Fatalf("unexpected passport request count: generate=%d poll=%d", generateRequests, pollRequests)
+	}
+}
+
+func TestRenderQRUsesHalfHeightBlocks(t *testing.T) {
+	content := "https://example.com/login"
+	rendered, err := renderQR(content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, err := qrcode.New(content, qrcode.Medium)
+	if err != nil {
+		t.Fatal(err)
+	}
+	matrix := addQRQuietZone(code.Bitmap())
+	lines := strings.Split(rendered, "\n")
+	if len(lines) != (len(matrix)+1)/2 {
+		t.Fatalf("unexpected compact QR height: %d", len(lines))
+	}
+	for _, line := range lines {
+		if utf8.RuneCountInString(line) != len(matrix[0]) {
+			t.Fatalf("unexpected compact QR width: %d", utf8.RuneCountInString(line))
+		}
 	}
 }

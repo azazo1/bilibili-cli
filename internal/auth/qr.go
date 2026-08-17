@@ -158,7 +158,85 @@ func renderQR(content string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimRight(code.ToString(false), "\n"), nil
+	return renderCompactQR(code.Bitmap()), nil
+}
+
+func renderCompactQR(matrix [][]bool) string {
+	matrix = addQRQuietZone(matrix)
+	if len(matrix) == 0 || len(matrix[0]) == 0 {
+		return ""
+	}
+	var builder strings.Builder
+	for row := 0; row < len(matrix); row += 2 {
+		top := matrix[row]
+		bottom := make([]bool, len(top))
+		if row+1 < len(matrix) {
+			bottom = matrix[row+1]
+		}
+		for column, topDark := range top {
+			bottomDark := column < len(bottom) && bottom[column]
+			switch {
+			case topDark && bottomDark:
+				builder.WriteByte(' ')
+			case topDark:
+				builder.WriteRune('▄')
+			case bottomDark:
+				builder.WriteRune('▀')
+			default:
+				builder.WriteRune('█')
+			}
+		}
+		if row+2 < len(matrix) {
+			builder.WriteByte('\n')
+		}
+	}
+	return builder.String()
+}
+
+func addQRQuietZone(matrix [][]bool) [][]bool {
+	if len(matrix) == 0 || len(matrix[0]) == 0 {
+		return nil
+	}
+	minX, minY := len(matrix[0]), len(matrix)
+	maxX, maxY := -1, -1
+	for y, row := range matrix {
+		for x, dark := range row {
+			if !dark {
+				continue
+			}
+			if x < minX {
+				minX = x
+			}
+			if x > maxX {
+				maxX = x
+			}
+			if y < minY {
+				minY = y
+			}
+			if y > maxY {
+				maxY = y
+			}
+		}
+	}
+	if maxX < minX || maxY < minY {
+		return nil
+	}
+	// 将库自带的静区收窄为一格, 保持紧凑终端布局.
+	const quietZone = 1
+	width := maxX - minX + 1 + quietZone*2
+	height := maxY - minY + 1 + quietZone*2
+	padded := make([][]bool, height)
+	for y := range padded {
+		padded[y] = make([]bool, width)
+	}
+	for y := minY; y <= maxY; y++ {
+		target := padded[y-minY+quietZone]
+		row := matrix[y]
+		for x := minX; x <= maxX && x < len(row); x++ {
+			target[x-minX+quietZone] = row[x]
+		}
+	}
+	return padded
 }
 
 func apiString(value any) string {
