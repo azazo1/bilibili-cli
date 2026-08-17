@@ -173,12 +173,18 @@ func renderUserListDirectory(app *App, writer io.Writer, directory api.UserListD
 		})
 	}
 	title := fmt.Sprintf("用户 UID: %d 的列表 (第 %d 页)", directory.OwnerID, directory.Page.Number)
+	if directory.Page.Total > 0 {
+		title = fmt.Sprintf("用户 UID: %d 的列表 (共 %d, 第 %d 页)", directory.OwnerID, directory.Page.Total, directory.Page.Number)
+	}
 	if len(rows) == 0 {
 		fmt.Fprintln(writer, title)
 		fmt.Fprintln(writer, "该用户暂无列表")
 		return
 	}
 	app.renderTable(writer, title, []string{"#", "ID", "标题", "视频数"}, rows)
+	if directory.Page.Number*directory.Page.Size < directory.Page.Total {
+		fmt.Fprintf(writer, "还有更多列表, 使用 bili user lists %d --page %d 查看下一页\n", directory.OwnerID, directory.Page.Number+1)
+	}
 }
 
 func renderUserList(app *App, writer io.Writer, list api.UserList, items []map[string]any) {

@@ -10,6 +10,7 @@ import (
 
 const userListIndexPageSize = 10
 const userListVideoPageSize = 30
+const userListIndexPath = "/x/polymer/web-space/seasons_series_list"
 
 type UserListKind string
 
@@ -126,21 +127,49 @@ func (c *Client) GetUserList(ctx context.Context, reference UserListReference, p
 
 	candidate, err := c.resolveUserList(ctx, reference, cred)
 	if err != nil {
+		if CodeOf(err) == CodeNotFound && reference.KindHint != userListKindSeries {
+			return c.getUnindexedUserSeason(ctx, reference, page, cred, err)
+		}
 		return UserList{}, err
 	}
-	var data map[string]any
-	switch candidate.Kind {
-	case userListKindSeason:
-		data, err = c.getUserSeasonArchives(ctx, reference, page, cred)
-	case userListKindSeries:
-		data, err = c.getUserSeriesArchives(ctx, reference, page, cred)
-	default:
-		return UserList{}, NewError(CodeUpstream, "获取用户列表", "用户列表索引返回了未知类型")
-	}
+	data, err := c.getUserListData(ctx, reference, candidate.Kind, page, cred)
 	if err != nil {
 		return UserList{}, err
 	}
+	return userListFromData(candidate, data, page)
+}
 
+func (c *Client) getUnindexedUserSeason(ctx context.Context, reference UserListReference, page int, cred *Credential, missingErr error) (UserList, error) {
+	data, err := c.getUserSeasonArchives(ctx, reference, page, cred)
+	if err != nil {
+		if CodeOf(err) == CodeNotFound {
+			return UserList{}, missingErr
+		}
+		return UserList{}, err
+	}
+	detailMetadata := mapValue(data["meta"])
+	candidate, ok := userListCandidateFromSeasonDetail(detailMetadata, reference)
+	if !ok {
+		return UserList{}, missingErr
+	}
+	if c.Logger != nil {
+		c.Logger.Debug("用户列表索引未包含合集, 使用详情回退", "uid", reference.OwnerID, "sid", reference.ListID)
+	}
+	return userListFromData(candidate, data, page)
+}
+
+func (c *Client) getUserListData(ctx context.Context, reference UserListReference, kind UserListKind, page int, cred *Credential) (map[string]any, error) {
+	switch kind {
+	case userListKindSeason:
+		return c.getUserSeasonArchives(ctx, reference, page, cred)
+	case userListKindSeries:
+		return c.getUserSeriesArchives(ctx, reference, page, cred)
+	default:
+		return nil, NewError(CodeUpstream, "获取用户列表", "用户列表索引返回了未知类型")
+	}
+}
+
+func userListFromData(candidate userListCandidate, data map[string]any, page int) (UserList, error) {
 	detailMetadata := mapValue(data["meta"])
 	if err := validateUserListDetailMetadata(detailMetadata, candidate); err != nil {
 		return UserList{}, err
@@ -166,8 +195,8 @@ func (c *Client) resolveUserList(ctx context.Context, reference UserListReferenc
 		if err != nil {
 			return userListCandidate{}, err
 		}
-		if indexPage.Page.Total > totalPages {
-			totalPages = indexPage.Page.Total
+		if pageCount := userListPageCount(indexPage.Page); pageCount > totalPages {
+			totalPages = pageCount
 		}
 		for _, candidate := range indexPage.Candidates {
 			if candidate.Metadata.ID != reference.ListID {
@@ -197,7 +226,7 @@ func (c *Client) getUserListIndexPage(ctx context.Context, ownerID int64, page i
 		"page_size": []string{strconv.Itoa(userListIndexPageSize)},
 	}
 	var data map[string]any
-	if err := c.requestWithHeaders(ctx, http.MethodGet, "/x/polymer/web-space/home/seasons_series", query, nil, cred, spaceRequestHeaders(ownerID), &data); err != nil {
+	if err := c.requestWithHeaders(ctx, http.MethodGet, userListIndexPath, query, nil, cred, spaceRequestHeaders(ownerID), &data); err != nil {
 		return userListIndexPage{}, withAction("获取用户列表", err)
 	}
 	items := mapValue(data["items_lists"])
@@ -233,6 +262,16 @@ func userListCandidates(data map[string]any, ownerID int64) []userListCandidate 
 		}
 	}
 	return items
+}
+
+func userListCandidateFromSeasonDetail(value map[string]any, reference UserListReference) (userListCandidate, bool) {
+	if int64Value(value["mid"], 0) != reference.OwnerID || int64Value(value["season_id"], 0) != reference.ListID {
+		return userListCandidate{}, false
+	}
+	return userListCandidate{
+		Kind:     userListKindSeason,
+		Metadata: newUserListMetadata(reference.OwnerID, reference.ListID, value),
+	}, true
 }
 
 func (c *Client) getUserSeasonArchives(ctx context.Context, reference UserListReference, page int, cred *Credential) (map[string]any, error) {
@@ -462,6 +501,13 @@ func userListPageFromData(value map[string]any, fallbackPage, fallbackSize int) 
 		size = fallbackSize
 	}
 	return UserListPage{Number: number, Size: size, Total: intValue(value["total"], 0)}
+}
+
+func userListPageCount(page UserListPage) int {
+	if page.Total < 1 || page.Size < 1 {
+		return 1
+	}
+	return (page.Total + page.Size - 1) / page.Size
 }
 
 func firstUserListString(values ...any) string {

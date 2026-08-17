@@ -65,7 +65,7 @@ func TestResolveUserListReferenceFollowsB23Redirect(t *testing.T) {
 
 func TestGetUserListDirectoryFlattensListKinds(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/x/polymer/web-space/home/seasons_series" {
+		if request.URL.Path != "/x/polymer/web-space/seasons_series_list" {
 			t.Fatalf("unexpected path: %s", request.URL.Path)
 		}
 		query := request.URL.Query()
@@ -94,7 +94,7 @@ func TestGetUserListDirectoryFlattensListKinds(t *testing.T) {
 func TestGetUserListUsesResolvedSeries(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
-		case "/x/polymer/web-space/home/seasons_series":
+		case "/x/polymer/web-space/seasons_series_list":
 			fmt.Fprint(writer, `{"code":0,"data":{"items_lists":{"page":{"page_num":1,"page_size":10,"total":1},"seasons_list":[],"series_list":[{"meta":{"mid":42,"series_id":9,"name":"series","total":31}}]}}}`)
 		case "/x/series/archives":
 			query := request.URL.Query()
@@ -122,12 +122,77 @@ func TestGetUserListUsesResolvedSeries(t *testing.T) {
 	}
 }
 
+func TestGetUserListReadsLaterDirectoryPage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/x/polymer/web-space/seasons_series_list":
+			switch request.URL.Query().Get("page_num") {
+			case "1":
+				fmt.Fprint(writer, `{"code":0,"data":{"items_lists":{"page":{"page_num":1,"page_size":10,"total":11},"seasons_list":[{"meta":{"mid":42,"season_id":7,"title":"first"}}],"series_list":[]}}}`)
+			case "2":
+				fmt.Fprint(writer, `{"code":0,"data":{"items_lists":{"page":{"page_num":2,"page_size":10,"total":11},"seasons_list":[],"series_list":[{"meta":{"mid":42,"series_id":9,"name":"second"}}]}}}`)
+			default:
+				t.Fatalf("unexpected directory page: %s", request.URL.RawQuery)
+			}
+		case "/x/series/archives":
+			if request.URL.Query().Get("series_id") != "9" {
+				t.Fatalf("unexpected series query: %s", request.URL.RawQuery)
+			}
+			fmt.Fprint(writer, `{"code":0,"data":{"page":{"num":1,"size":30,"total":1},"archives":[{"bvid":"BV1ABcsztEcY","title":"video","duration":60}]}}`)
+		default:
+			t.Fatalf("unexpected path: %s", request.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	client.BaseURL = server.URL
+	client.HTTP = server.Client()
+	list, err := client.GetUserList(context.Background(), UserListReference{OwnerID: 42, ListID: 9}, 1, nil)
+	if err != nil || list.Metadata.Title != "second" || len(list.Archives) != 1 {
+		t.Fatalf("GetUserList() = %#v, %v", list, err)
+	}
+}
+
+func TestGetUserListFallsBackToValidatedSeasonDetail(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/x/polymer/web-space/seasons_series_list":
+			fmt.Fprint(writer, `{"code":0,"data":{"items_lists":{"page":{"page_num":1,"page_size":10,"total":1},"seasons_list":[{"meta":{"mid":42,"season_id":7,"title":"indexed"}}],"series_list":[]}}}`)
+		case "/x/polymer/web-space/seasons_archives_list":
+			query := request.URL.Query()
+			if query.Get("mid") != "42" || query.Get("season_id") != "9" || query.Get("page_num") != "1" || query.Get("page_size") != "30" {
+				t.Fatalf("unexpected season query: %s", request.URL.RawQuery)
+			}
+			fmt.Fprint(writer, `{"code":0,"data":{"meta":{"mid":42,"season_id":9,"title":"unindexed","total":1},"page":{"page_num":1,"page_size":30,"total":1},"archives":[{"bvid":"BV1ABcsztEcY","title":"video","duration":60}]}}`)
+		default:
+			t.Fatalf("unexpected path: %s", request.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	client.BaseURL = server.URL
+	client.HTTP = server.Client()
+	list, err := client.GetUserList(context.Background(), UserListReference{OwnerID: 42, ListID: 9}, 1, nil)
+	if err != nil || list.Metadata.Title != "unindexed" || list.Metadata.Total != 1 || len(list.Archives) != 1 {
+		t.Fatalf("GetUserList() = %#v, %v", list, err)
+	}
+}
+
 func TestGetUserListRejectsUnmatchedOrAmbiguousID(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/x/polymer/web-space/home/seasons_series" {
-			t.Fatalf("detail endpoint should not be requested: %s", request.URL.Path)
+		switch request.URL.Path {
+		case "/x/polymer/web-space/seasons_series_list":
+			fmt.Fprint(writer, `{"code":0,"data":{"items_lists":{"page":{"page_num":1,"page_size":10,"total":1},"seasons_list":[{"meta":{"mid":42,"season_id":7,"title":"season"}},{"meta":{"mid":99,"season_id":8,"title":"other"}}],"series_list":[{"meta":{"mid":42,"series_id":7,"name":"series"}}]}}}`)
+		case "/x/polymer/web-space/seasons_archives_list":
+			if request.URL.Query().Get("season_id") != "8" {
+				t.Fatalf("unexpected season query: %s", request.URL.RawQuery)
+			}
+			fmt.Fprint(writer, `{"code":0,"data":{"meta":{"mid":99,"season_id":8,"title":"other"},"page":{"page_num":1,"page_size":30,"total":1},"archives":[]}}`)
+		default:
+			t.Fatalf("unexpected path: %s", request.URL.Path)
 		}
-		fmt.Fprint(writer, `{"code":0,"data":{"items_lists":{"page":{"page_num":1,"page_size":10,"total":1},"seasons_list":[{"meta":{"mid":42,"season_id":7,"title":"season"}},{"meta":{"mid":99,"season_id":8,"title":"other"}}],"series_list":[{"meta":{"mid":42,"series_id":7,"name":"series"}}]}}}`)
 	}))
 	defer server.Close()
 
@@ -145,7 +210,7 @@ func TestGetUserListRejectsUnmatchedOrAmbiguousID(t *testing.T) {
 func TestGetUserListUsesKindHintForAmbiguousID(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
-		case "/x/polymer/web-space/home/seasons_series":
+		case "/x/polymer/web-space/seasons_series_list":
 			fmt.Fprint(writer, `{"code":0,"data":{"items_lists":{"page":{"page_num":1,"page_size":10,"total":1},"seasons_list":[{"meta":{"mid":42,"season_id":7,"title":"season"}}],"series_list":[{"meta":{"mid":42,"series_id":7,"name":"series"}}]}}}`)
 		case "/x/series/archives":
 			fmt.Fprint(writer, `{"code":0,"data":{"page":{"num":1,"size":30,"total":0},"archives":[]}}`)

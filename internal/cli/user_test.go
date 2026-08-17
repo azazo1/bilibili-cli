@@ -64,7 +64,7 @@ func TestResolveUIDAcceptsSpaceURL(t *testing.T) {
 
 func TestUserListsCommandWorksInReadOnlyMode(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/x/polymer/web-space/home/seasons_series" {
+		if request.URL.Path != "/x/polymer/web-space/seasons_series_list" {
 			t.Fatalf("unexpected path: %s", request.URL.Path)
 		}
 		fmt.Fprint(writer, `{"code":0,"data":{"items_lists":{"page":{"page_num":1,"page_size":10,"total":1},"seasons_list":[{"meta":{"mid":42,"season_id":7,"title":"season","total":2}}],"series_list":[{"meta":{"mid":42,"series_id":9,"name":"series","total":3}}]}}}`)
@@ -111,7 +111,7 @@ func TestUserListsCommandResolvesUserName(t *testing.T) {
 				t.Fatalf("unexpected user search query: %s", request.URL.RawQuery)
 			}
 			fmt.Fprint(writer, `{"code":0,"data":{"result":[{"mid":42,"uname":"demo-up"}]}}`)
-		case "/x/polymer/web-space/home/seasons_series":
+		case "/x/polymer/web-space/seasons_series_list":
 			if request.URL.Query().Get("mid") != "42" {
 				t.Fatalf("unexpected list query: %s", request.URL.RawQuery)
 			}
@@ -145,7 +145,7 @@ func TestUserListsCommandResolvesUserName(t *testing.T) {
 func TestUserListsCommandLoadsSelectedList(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
-		case "/x/polymer/web-space/home/seasons_series":
+		case "/x/polymer/web-space/seasons_series_list":
 			fmt.Fprint(writer, `{"code":0,"data":{"items_lists":{"page":{"page_num":1,"page_size":10,"total":1},"seasons_list":[{"meta":{"mid":42,"season_id":7,"title":"list","total":1}}],"series_list":[]}}}`)
 		case "/x/polymer/web-space/seasons_archives_list":
 			query := request.URL.Query()
