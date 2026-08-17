@@ -102,7 +102,16 @@ func newVideoCommand(app *App) *cobra.Command {
 	command.Flags().BoolVar(&showAI, "ai", false, "显示 AI 总结")
 	command.Flags().BoolVarP(&related, "related", "r", false, "显示相关推荐")
 	addStructuredFlags(command, &asJSON, &asYAML)
-	command.AddCommand(newSubtitleCommand(app))
+	command.AddCommand(
+		newSubtitleCommand(app),
+		newAudioCommand(app),
+		newCoinCommand(app),
+		newHotCommand(app),
+		newLikeCommand(app),
+		newRankCommand(app),
+		newTripleCommand(app),
+		newWatchLaterCommand(app),
+	)
 	return command
 }
 

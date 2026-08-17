@@ -19,11 +19,8 @@ func newCollectionCommands(app *App) []*cobra.Command {
 		newFavoritesCommand(app),
 		newFollowingCommand(app),
 		newHistoryCommand(app),
-		newWatchLaterCommand(app),
 		newFeedCommand(app),
 		newMyDynamicsCommand(app),
-		newDynamicPostCommand(app),
-		newDynamicDeleteCommand(app),
 	}
 }
 
@@ -31,7 +28,8 @@ func newFavoritesCommand(app *App) *cobra.Command {
 	var page int
 	var asJSON, asYAML bool
 	command := &cobra.Command{
-		Use:   "favorites [FAV_ID]",
+		Use:     "fav [FAV_ID]",
+		Aliases: []string{"favorites"},
 		Short: "浏览收藏夹",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -42,7 +40,7 @@ func newFavoritesCommand(app *App) *cobra.Command {
 			if page < 1 {
 				return app.invalidInput(cmd, "--page 必须大于 0", mode)
 			}
-			credential, err := app.RequireCredential(contextOrBackground(cmd.Context()), false, mode, "需要登录才能查看收藏夹. 使用 bili login 登录")
+			credential, err := app.RequireCredential(contextOrBackground(cmd.Context()), false, mode, "需要登录才能查看收藏夹. 使用 bili me login 登录")
 			if err != nil {
 				return err
 			}
@@ -85,7 +83,7 @@ func newFavoritesCommand(app *App) *cobra.Command {
 				}
 				renderTable(w, fmt.Sprintf("收藏夹 #%d (第 %d 页)", favID, page), []string{"#", "BV号", "标题", "UP主", "时长"}, rows)
 				if boolValue(data["has_more"]) {
-					fmt.Fprintf(w, "还有更多内容, 使用 bili favorites %d --page %d 查看下一页\n", favID, page+1)
+					fmt.Fprintf(w, "还有更多内容, 使用 bili me fav %d --page %d 查看下一页\n", favID, page+1)
 				}
 			})
 		},
@@ -135,7 +133,7 @@ func newFollowingCommand(app *App) *cobra.Command {
 					rows = append(rows, []string{fmt.Sprintf("%d", index+1+(page-1)*20), stringValue(item["mid"]), stringValue(item["uname"]), truncate(stringValue(item["sign"]), 40)})
 				}
 				renderTable(w, fmt.Sprintf("关注列表 (共 %d, 第 %d 页)", intValue(data["total"], 0), page), []string{"#", "UID", "用户名", "签名"}, rows)
-				fmt.Fprintf(w, "使用 bili following --page %d 查看下一页\n", page+1)
+				fmt.Fprintf(w, "使用 bili me following --page %d 查看下一页\n", page+1)
 			})
 		},
 	}
@@ -196,7 +194,8 @@ func newHistoryCommand(app *App) *cobra.Command {
 func newWatchLaterCommand(app *App) *cobra.Command {
 	var asJSON, asYAML bool
 	command := &cobra.Command{
-		Use:   "watch-later",
+		Use:     "watch-later",
+		Aliases: []string{"watch"},
 		Short: "查看稍后再看列表",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			mode, err := app.mode(cmd, asJSON, asYAML)
@@ -284,7 +283,7 @@ func newFeedCommand(app *App) *cobra.Command {
 					fmt.Fprintln(w)
 				}
 				if next != "" {
-					fmt.Fprintf(w, "下一页: bili feed --offset %s\n", next)
+				fmt.Fprintf(w, "下一页: bili me feed --offset %s\n", next)
 				}
 			})
 		},
@@ -300,7 +299,8 @@ func newMyDynamicsCommand(app *App) *cobra.Command {
 	var needTop, noTop bool
 	var asJSON, asYAML bool
 	command := &cobra.Command{
-		Use:   "my-dynamics",
+		Use:     "dynamic",
+		Aliases: []string{"dynamics"},
 		Short: "查看我发布的动态",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			mode, err := app.mode(cmd, asJSON, asYAML)
@@ -347,7 +347,7 @@ func newMyDynamicsCommand(app *App) *cobra.Command {
 				renderTable(w, fmt.Sprintf("我的动态 (offset=%d)", offset), []string{"动态ID", "发布时间", "内容"}, rows)
 				next := firstString(data["next_offset"], data["offset"])
 				if next != "" && next != strconv.FormatInt(offset, 10) {
-					fmt.Fprintf(w, "下一页: bili my-dynamics --offset %s\n", next)
+					fmt.Fprintf(w, "下一页: bili me dynamic --offset %s\n", next)
 				}
 			})
 		},
@@ -364,7 +364,7 @@ func newDynamicPostCommand(app *App) *cobra.Command {
 	var fromFile string
 	var asJSON, asYAML bool
 	command := &cobra.Command{
-		Use:   "dynamic-post [TEXT]",
+		Use:   "post [TEXT]",
 		Short: "发布一条纯文本动态",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -372,7 +372,7 @@ func newDynamicPostCommand(app *App) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			credential, err := app.RequireCredential(contextOrBackground(cmd.Context()), true, mode, "未登录. 使用 bili login 登录")
+			credential, err := app.RequireCredential(contextOrBackground(cmd.Context()), true, mode, "未登录. 使用 bili me login 登录")
 			if err != nil {
 				return err
 			}
@@ -415,7 +415,7 @@ func newDynamicDeleteCommand(app *App) *cobra.Command {
 	var yes bool
 	var asJSON, asYAML bool
 	command := &cobra.Command{
-		Use:   "dynamic-delete DYNAMIC_ID",
+		Use:   "delete DYNAMIC_ID",
 		Short: "删除一条动态",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -427,7 +427,7 @@ func newDynamicDeleteCommand(app *App) *cobra.Command {
 			if parseErr != nil || id <= 0 {
 				return app.invalidInput(cmd, "DYNAMIC_ID 必须是正整数", mode)
 			}
-			credential, err := app.RequireCredential(contextOrBackground(cmd.Context()), true, mode, "未登录. 使用 bili login 登录")
+			credential, err := app.RequireCredential(contextOrBackground(cmd.Context()), true, mode, "未登录. 使用 bili me login 登录")
 			if err != nil {
 				return err
 			}

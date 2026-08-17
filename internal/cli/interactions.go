@@ -10,13 +10,49 @@ import (
 	"github.com/azazo1/bilibili-cli/internal/model"
 )
 
-func newInteractionCommands(app *App) []*cobra.Command {
+func newVideoInteractionCommands(app *App) []*cobra.Command {
 	return []*cobra.Command{
 		newLikeCommand(app),
 		newCoinCommand(app),
 		newTripleCommand(app),
+	}
+}
+
+func newUserInteractionCommands(app *App) []*cobra.Command {
+	return []*cobra.Command{
+		newFollowCommand(app),
 		newUnfollowCommand(app),
 	}
+}
+
+func newFollowCommand(app *App) *cobra.Command {
+	var asJSON, asYAML bool
+	command := &cobra.Command{
+		Use:   "follow UID",
+		Short: "关注用户",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			mode, err := app.mode(cmd, asJSON, asYAML)
+			if err != nil {
+				return err
+			}
+			uid, parseErr := strconv.ParseInt(args[0], 10, 64)
+			if parseErr != nil || uid <= 0 {
+				return app.invalidInput(cmd, "UID 必须是正整数", mode)
+			}
+			credential, err := app.RequireCredential(contextOrBackground(cmd.Context()), true, mode, "未登录. 使用 bili me login 登录")
+			if err != nil {
+				return err
+			}
+			if fetchErr := app.API.FollowUser(contextOrBackground(cmd.Context()), uid, credential); fetchErr != nil {
+				return app.apiFailure(fetchErr, "关注用户失败", mode)
+			}
+			payload := model.ActionResult("follow", map[string]any{"uid": uid})
+			return app.Complete(payload, mode, func(w io.Writer) { fmt.Fprintf(w, "已关注 UID=%d\n", uid) })
+		},
+	}
+	addStructuredFlags(command, &asJSON, &asYAML)
+	return command
 }
 
 func newLikeCommand(app *App) *cobra.Command {
@@ -30,7 +66,7 @@ func newLikeCommand(app *App) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			credential, err := app.RequireCredential(contextOrBackground(cmd.Context()), true, mode, "未登录. 使用 bili login 登录")
+			credential, err := app.RequireCredential(contextOrBackground(cmd.Context()), true, mode, "未登录. 使用 bili me login 登录")
 			if err != nil {
 				return err
 			}
@@ -75,7 +111,7 @@ func newCoinCommand(app *App) *cobra.Command {
 			if coins < 1 || coins > 2 {
 				return app.invalidInput(cmd, "--num 必须是 1 或 2", mode)
 			}
-			credential, err := app.RequireCredential(contextOrBackground(cmd.Context()), true, mode, "未登录. 使用 bili login 登录")
+			credential, err := app.RequireCredential(contextOrBackground(cmd.Context()), true, mode, "未登录. 使用 bili me login 登录")
 			if err != nil {
 				return err
 			}
@@ -106,7 +142,7 @@ func newTripleCommand(app *App) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			credential, err := app.RequireCredential(contextOrBackground(cmd.Context()), true, mode, "未登录. 使用 bili login 登录")
+			credential, err := app.RequireCredential(contextOrBackground(cmd.Context()), true, mode, "未登录. 使用 bili me login 登录")
 			if err != nil {
 				return err
 			}
@@ -142,7 +178,7 @@ func newUnfollowCommand(app *App) *cobra.Command {
 			if parseErr != nil || uid <= 0 {
 				return app.invalidInput(cmd, "UID 必须是正整数", mode)
 			}
-			credential, err := app.RequireCredential(contextOrBackground(cmd.Context()), true, mode, "未登录. 使用 bili login 登录")
+			credential, err := app.RequireCredential(contextOrBackground(cmd.Context()), true, mode, "未登录. 使用 bili me login 登录")
 			if err != nil {
 				return err
 			}

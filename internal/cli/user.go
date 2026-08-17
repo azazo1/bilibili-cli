@@ -65,6 +65,8 @@ func newUserCommand(app *App) *cobra.Command {
 		},
 	}
 	addStructuredFlags(command, &asJSON, &asYAML)
+	command.AddCommand(newUserVideosCommand(app))
+	command.AddCommand(newUserInteractionCommands(app)...)
 	return command
 }
 
@@ -72,7 +74,7 @@ func newUserVideosCommand(app *App) *cobra.Command {
 	var count int
 	var asJSON, asYAML bool
 	command := &cobra.Command{
-		Use:   "user-videos UID_OR_NAME",
+		Use:   "video UID_OR_NAME",
 		Short: "查看 UP 主的视频列表",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

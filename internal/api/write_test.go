@@ -68,3 +68,23 @@ func TestDeleteDynamicUsesWebAPI(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestFollowUserUsesRelationModify(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/x/relation/modify" || r.Method != http.MethodPost {
+			t.Fatalf("unexpected follow request: %s %s", r.Method, r.URL.Path)
+		}
+		if err := r.ParseForm(); err != nil || r.Form.Get("fid") != "42" || r.Form.Get("act") != "1" || r.Form.Get("csrf") != "csrf" {
+			t.Fatalf("unexpected follow form: %v", r.Form)
+		}
+		fmt.Fprint(w, `{"code":0,"data":null}`)
+	}))
+	defer server.Close()
+	client := NewClient()
+	client.BaseURL = server.URL
+	client.HTTP = server.Client()
+	credential := &Credential{Sessdata: "sess", BiliJct: "csrf"}
+	if err := client.FollowUser(context.Background(), 42, credential); err != nil {
+		t.Fatal(err)
+	}
+}

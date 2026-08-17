@@ -35,8 +35,7 @@ func newAccountCommands(app *App) []*cobra.Command {
 		},
 	}
 	status := newStatusCommand(app)
-	whoami := newWhoamiCommand(app)
-	return []*cobra.Command{login, logout, status, whoami}
+	return []*cobra.Command{login, logout, status}
 }
 
 func newStatusCommand(app *App) *cobra.Command {
@@ -54,7 +53,7 @@ func newStatusCommand(app *App) *cobra.Command {
 				return app.Fail(err, "检查登录状态失败", mode)
 			}
 			if credential == nil {
-				return app.Fail(api.NewError(api.CodeNotAuthenticated, "", "未登录. 使用 bili login 登录"), "", mode)
+				return app.Fail(api.NewError(api.CodeNotAuthenticated, "", "未登录. 使用 bili me login 登录"), "", mode)
 			}
 			info, err := app.API.GetSelfInfo(contextOrBackground(cmd.Context()), credential)
 			if err != nil {
@@ -73,14 +72,14 @@ func newStatusCommand(app *App) *cobra.Command {
 func newWhoamiCommand(app *App) *cobra.Command {
 	var asJSON, asYAML bool
 	command := &cobra.Command{
-		Use:   "whoami",
+		Use:   "me",
 		Short: "查看当前登录用户",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			mode, err := app.mode(cmd, asJSON, asYAML)
 			if err != nil {
 				return err
 			}
-			credential, err := app.RequireCredential(contextOrBackground(cmd.Context()), false, mode, "未登录. 使用 bili login 登录")
+			credential, err := app.RequireCredential(contextOrBackground(cmd.Context()), false, mode, "未登录. 使用 bili me login 登录")
 			if err != nil {
 				return err
 			}
@@ -100,6 +99,13 @@ func newWhoamiCommand(app *App) *cobra.Command {
 		},
 	}
 	addStructuredFlags(command, &asJSON, &asYAML)
+	return command
+}
+
+func newMeCommand(app *App) *cobra.Command {
+	command := newWhoamiCommand(app)
+	command.AddCommand(newAccountCommands(app)...)
+	command.AddCommand(newCollectionCommands(app)...)
 	return command
 }
 

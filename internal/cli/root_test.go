@@ -189,7 +189,7 @@ func TestHotCommandUsesNormalizedEnvelope(t *testing.T) {
 	stdout := &bytes.Buffer{}
 	app.Out = &output.Writer{Stdout: stdout, Stderr: &bytes.Buffer{}}
 	root := NewRoot(app)
-	root.SetArgs([]string{"hot", "--max", "1", "--json"})
+	root.SetArgs([]string{"video", "hot", "--max", "1", "--json"})
 	if err := root.ExecuteContext(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +211,7 @@ func TestReadOnlyBlocksAccountWriteCommands(t *testing.T) {
 	stdout := &bytes.Buffer{}
 	app.Out = &output.Writer{Stdout: stdout, Stderr: &bytes.Buffer{}}
 	root := NewRoot(app)
-	root.SetArgs([]string{"like", "BV1ABcsztEcY", "--json"})
+	root.SetArgs([]string{"video", "like", "BV1ABcsztEcY", "--json"})
 	err := root.ExecuteContext(context.Background())
 	var exitErr *ExitError
 	if !errors.As(err, &exitErr) || exitErr.Code != 1 {
@@ -236,7 +236,7 @@ func TestReadOnlyAllowsLogout(t *testing.T) {
 	stdout := &bytes.Buffer{}
 	app.Out = &output.Writer{Stdout: stdout, Stderr: &bytes.Buffer{}}
 	root := NewRoot(app)
-	root.SetArgs([]string{"logout"})
+	root.SetArgs([]string{"me", "logout"})
 	if err := root.ExecuteContext(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -396,6 +396,36 @@ func TestVideoSubtitleCommandReplacesLegacyFlags(t *testing.T) {
 	}
 	if subtitle.Name() != "subtitle" {
 		t.Fatalf("unexpected subtitle command: %s", subtitle.Name())
+	}
+}
+
+func TestCommandHierarchyUsesDomainParents(t *testing.T) {
+	root := NewRoot(newTestApp(t))
+	cases := [][]string{
+		{"me"},
+		{"me", "fav"},
+		{"me", "history"},
+		{"me", "dynamic"},
+		{"video", "like"},
+		{"video", "audio"},
+		{"video", "hot"},
+		{"video", "watch"},
+		{"user", "video"},
+		{"user", "follow"},
+		{"dynamic", "post"},
+		{"dynamic", "delete"},
+	}
+	for _, args := range cases {
+		command, _, err := root.Find(args)
+		if err != nil {
+			t.Fatalf("command %v not found: %v", args, err)
+		}
+		if command == nil {
+			t.Fatalf("command %v resolved to nil", args)
+		}
+	}
+	if _, _, err := root.Find([]string{"whoami"}); err == nil {
+		t.Fatal("legacy whoami command is still registered")
 	}
 }
 

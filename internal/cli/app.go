@@ -138,11 +138,11 @@ func (a *App) RequireCredential(ctx context.Context, write bool, mode output.Mod
 	}
 	if write {
 		if saved, _ := a.Auth.GetCredential(ctx, auth.ModeOptional); saved != nil && saved.BiliJct == "" {
-			return nil, a.Fail(api.NewError(api.CodePermissionDenied, "", "当前登录凭证不支持写操作, 缺少 bili_jct. 请执行 bili login 重新登录"), "", mode)
+			return nil, a.Fail(api.NewError(api.CodePermissionDenied, "", "当前登录凭证不支持写操作, 缺少 bili_jct. 请执行 bili me login 重新登录"), "", mode)
 		}
 	}
 	if message == "" {
-		message = "未登录. 使用 bili login 登录"
+		message = "未登录. 使用 bili me login 登录"
 	}
 	return nil, a.Fail(api.NewError(api.CodeNotAuthenticated, "", message), "", mode)
 }

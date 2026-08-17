@@ -24,15 +24,9 @@ func NewRoot(app *App) *cobra.Command {
 		},
 	}
 	root.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "启用调试日志")
-	root.AddCommand(
-		newAccountCommands(app)...,
-	)
-	root.AddCommand(newVideoCommand(app), newUserCommand(app), newUserVideosCommand(app), newSearchCommand(app))
+	root.AddCommand(newMeCommand(app))
+	root.AddCommand(newVideoCommand(app), newUserCommand(app), newSearchCommand(app), newDynamicCommand(app))
 	root.AddCommand(newConfigCommand(app))
-	root.AddCommand(newCollectionCommands(app)...)
-	root.AddCommand(newHotCommand(app), newRankCommand(app))
-	root.AddCommand(newInteractionCommands(app)...)
-	root.AddCommand(newAudioCommand(app))
 	configureUsageErrors(root, app)
 	return root
 }

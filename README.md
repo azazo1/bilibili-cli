@@ -25,14 +25,14 @@ go build -o bin/bili ./cmd/bili
 也可以直接运行:
 
 ```shell
-go run ./cmd/bili hot --max 5 --yaml
+go run ./cmd/bili video hot --max 5 --yaml
 ```
 
 ## 登录
 
 ```shell
-go run ./cmd/bili login
-go run ./cmd/bili status --yaml
+go run ./cmd/bili me login
+go run ./cmd/bili me --yaml
 ```
 
 ## 字幕
@@ -44,6 +44,8 @@ go run ./cmd/bili video st BV1ABcsztEcY -o ./subtitles/subt.srt
 ```
 
 `bili video subtitle` 会列出播放器接口返回的所有字幕轨道, 包含 ID, 语言, 字幕类型, AI 标记, 作者和字幕行数. 可通过 `--id`, `--language` 或 `--type all|ai|non-ai` 筛选轨道. `--language` 使用 API 的 `lan`, 并兼容 `zh-CN` 与 `zh_CN` 两种写法. 当 `-o` 指向 `subt.srt` 时, 每条可下载字幕会写为 `subt-<lan>.srt` 或 `subt-<lan>-ai.srt`.
+
+其他命令按领域组织在 `bili me`, `bili user`, `bili video` 和 `bili dynamic` 下. 例如 `bili user video UID_OR_NAME`, `bili user follow UID`, `bili me fav`, `bili video watch` 和 `bili dynamic post TEXT`.
 
 配置和认证默认保存在 `~/.config/bilibili-cli/config.toml` 与 `~/.config/bilibili-cli/auth.json`. 如需从已有 cookie 导入, 可以传入 `BILI_COOKIE` 或 Netscape cookie 文件路径 `BILI_COOKIE_FILE`.
 
@@ -67,7 +69,7 @@ confirm_dangerous_actions = true
 
 `output.format` 支持 `auto`, `rich`, `json`, `yaml`. `OUTPUT` 环境变量会覆盖这个值.
 
-`safety.read_only = true` 会拒绝动态发布和删除, 点赞, 投币, 一键三连, 取关等账户侧写操作. `login` 和 `logout` 仍然可用. `confirm_dangerous_actions` 控制删除动态和取关是否需要额外确认.
+`safety.read_only = true` 会拒绝动态发布和删除, 点赞, 投币, 一键三连, 取关等账户侧写操作. `me login` 和 `me logout` 仍然可用. `confirm_dangerous_actions` 控制删除动态和取关是否需要额外确认.
 
 ## 输出
 

@@ -82,12 +82,20 @@ func (c *Client) videoAID(ctx context.Context, bvid string, cred *Credential) (i
 }
 
 func (c *Client) UnfollowUser(ctx context.Context, uid int64, cred *Credential) error {
+	return c.modifyUserRelation(ctx, uid, "2", cred)
+}
+
+func (c *Client) FollowUser(ctx context.Context, uid int64, cred *Credential) error {
+	return c.modifyUserRelation(ctx, uid, "1", cred)
+}
+
+func (c *Client) modifyUserRelation(ctx context.Context, uid int64, action string, cred *Credential) error {
 	if err := requireCredential("修改用户关系", cred, true); err != nil {
 		return err
 	}
 	form := url.Values{
 		"fid":    []string{fmt.Sprintf("%d", uid)},
-		"act":    []string{"2"},
+		"act":    []string{action},
 		"re_src": []string{"11"},
 		"csrf":   []string{cred.BiliJct},
 	}
