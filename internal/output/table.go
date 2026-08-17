@@ -10,6 +10,7 @@ import (
 
 var terminalWidthCondition = func() *runewidth.Condition {
 	condition := runewidth.NewCondition()
+	condition.EastAsianWidth = true
 	condition.StrictEmojiNeutral = false
 	return condition
 }()
