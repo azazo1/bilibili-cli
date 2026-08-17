@@ -1,0 +1,71 @@
+package cli
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/azazo1/bilibili-cli/internal/api"
+	"github.com/azazo1/bilibili-cli/internal/output"
+)
+
+func TestVideoInvalidBVIDEmitsStructuredError(t *testing.T) {
+	app := NewApp()
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	app.Out = &output.Writer{Stdout: stdout, Stderr: stderr}
+	root := NewRoot(app)
+	root.SetArgs([]string{"video", "invalid", "--json"})
+	err := root.ExecuteContext(context.Background())
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != 1 {
+		t.Fatalf("unexpected command error: %v", err)
+	}
+	var payload map[string]any
+	if decodeErr := json.Unmarshal(stdout.Bytes(), &payload); decodeErr != nil {
+		t.Fatalf("invalid JSON: %v", decodeErr)
+	}
+	errorData := payload["error"].(map[string]any)
+	if payload["ok"] != false || errorData["code"] != string(api.CodeInvalidInput) {
+		t.Fatalf("unexpected payload: %#v", payload)
+	}
+}
+
+func TestHotCommandUsesNormalizedEnvelope(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/x/web-interface/popular" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if r.URL.Query().Get("ps") != "1" {
+			t.Fatalf("unexpected query: %s", r.URL.RawQuery)
+		}
+		fmt.Fprint(w, `{"code":0,"data":{"list":[{"bvid":"BV1ABcsztEcY","title":"demo","duration":60,"owner":{"mid":1,"name":"up"},"stat":{"view":9}}]}}`)
+	}))
+	defer server.Close()
+
+	app := NewApp()
+	app.API.BaseURL = server.URL
+	app.API.HTTP = server.Client()
+	stdout := &bytes.Buffer{}
+	app.Out = &output.Writer{Stdout: stdout, Stderr: &bytes.Buffer{}}
+	root := NewRoot(app)
+	root.SetArgs([]string{"hot", "--max", "1", "--json"})
+	if err := root.ExecuteContext(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	data := envelope["data"].(map[string]any)
+	items := data["items"].([]any)
+	item := items[0].(map[string]any)
+	if envelope["ok"] != true || item["duration"] != "01:00" || item["bvid"] != "BV1ABcsztEcY" {
+		t.Fatalf("unexpected envelope: %#v", envelope)
+	}
+}

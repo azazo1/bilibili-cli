@@ -1,0 +1,130 @@
+package cli
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"regexp"
+	"strings"
+
+	"github.com/azazo1/bilibili-cli/internal/api"
+	"github.com/azazo1/bilibili-cli/internal/model"
+	"github.com/azazo1/bilibili-cli/internal/output"
+)
+
+func (a *App) mode(asJSON, asYAML bool) (output.Mode, error) {
+	mode, err := a.ResolveOutput(asJSON, asYAML)
+	if err != nil {
+		return mode, a.Fail(err, "", mode)
+	}
+	return mode, nil
+}
+
+func (a *App) extractBVID(value string, mode output.Mode) (string, error) {
+	bvid, err := api.ExtractBVID(value)
+	if err != nil {
+		return "", a.Fail(err, "", mode)
+	}
+	return bvid, nil
+}
+
+func (a *App) apiFailure(err error, action string, mode output.Mode) error {
+	return a.Fail(err, action, mode)
+}
+
+func renderTable(w io.Writer, title string, headers []string, rows [][]string) {
+	if title != "" {
+		fmt.Fprintln(w, title)
+	}
+	if len(headers) > 0 {
+		fmt.Fprintln(w, strings.Join(headers, "\t"))
+	}
+	for _, row := range rows {
+		fmt.Fprintln(w, strings.Join(row, "\t"))
+	}
+}
+
+func truncate(value string, max int) string {
+	runes := []rune(value)
+	if len(runes) <= max {
+		return value
+	}
+	return string(runes[:max])
+}
+
+func formatDuration(value any) string { return model.FormatDuration(value) }
+func formatCount(value any) string    { return model.FormatCount(value) }
+
+func firstMapList(value any) []map[string]any { return model.Maps(value) }
+
+func mapValue(value any) map[string]any { return model.Map(value) }
+
+func stringValue(value any) string { return model.String(value) }
+
+func intValue(value any, fallback int) int { return model.ToInt(value, fallback) }
+
+func int64Value(value any, fallback int64) int64 { return model.ToInt64(value, fallback) }
+
+func decodeDynamicText(item map[string]any) string {
+	parts := make([]string, 0, 4)
+	modules := model.Map(item["modules"])
+	dynamic := model.Map(modules["module_dynamic"])
+	desc := model.Map(dynamic["desc"])
+	if value := strings.TrimSpace(model.String(desc["text"])); value != "" {
+		parts = append(parts, value)
+	}
+	card := model.DecodeJSON(item["card"])
+	for _, key := range []string{"title", "description", "dynamic", "summary"} {
+		if value := strings.TrimSpace(model.String(card[key])); value != "" {
+			parts = append(parts, value)
+		}
+	}
+	cardItem := model.Map(card["item"])
+	for _, key := range []string{"title", "description", "content"} {
+		if value := strings.TrimSpace(model.String(cardItem[key])); value != "" {
+			parts = append(parts, value)
+		}
+	}
+	if len(parts) == 0 {
+		fallback := model.Map(item["desc"])
+		for _, key := range []string{"description", "dynamic_id_str"} {
+			if value := strings.TrimSpace(model.String(fallback[key])); value != "" {
+				parts = append(parts, value)
+			}
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+func dynamicID(item map[string]any) int64 {
+	desc := model.Map(item["desc"])
+	for _, value := range []any{desc["dynamic_id"], desc["dynamic_id_str"], item["id_str"], item["id"]} {
+		if parsed := model.ToInt64(value, 0); parsed != 0 {
+			return parsed
+		}
+	}
+	return 0
+}
+
+func dynamicTimestamp(item map[string]any) int64 {
+	return model.ToInt64(model.Map(item["desc"])["timestamp"], 0)
+}
+
+func timestampDisplay(value int64) string {
+	if value <= 0 {
+		return "-"
+	}
+	return model.TimestampISO(value)
+}
+
+func contextOrBackground(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	return ctx
+}
+
+var htmlTagPattern = regexp.MustCompile(`<[^>]+>`)
+
+func stripHTML(value string) string { return strings.TrimSpace(htmlTagPattern.ReplaceAllString(value, "")) }
+

@@ -1,0 +1,14 @@
+# Upstream source kept for local reference only.
+/references/
+
+# Go build and test artifacts.
+/bin/
+*.test
+*.out
+coverage.out
+
+# Local credentials and runtime output.
+.bilibili-cli/
+*.m4a
+*.m4s
+*.wav
