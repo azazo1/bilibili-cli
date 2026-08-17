@@ -120,6 +120,8 @@ func renderConfigStatus(w io.Writer, report config.StatusReport) {
 			if currentSection != parts[0] {
 				if currentSection != "" {
 					fmt.Fprintln(w)
+				} else {
+					fmt.Println()
 				}
 				fmt.Fprintf(w, "%s:\n", parts[0])
 				currentSection = parts[0]
