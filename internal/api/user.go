@@ -156,53 +156,6 @@ func (c *Client) GetUserVideos(ctx context.Context, uid int64, count int, cred *
 	return result, nil
 }
 
-func (c *Client) SearchUser(ctx context.Context, keyword string, page int) ([]map[string]any, error) {
-	return c.search(ctx, keyword, "bili_user", page, "搜索用户")
-}
-
-func (c *Client) SearchVideo(ctx context.Context, keyword string, page int) ([]map[string]any, error) {
-	return c.search(ctx, keyword, "video", page, "搜索视频")
-}
-
-func (c *Client) search(ctx context.Context, keyword, searchType string, page int, action string) ([]map[string]any, error) {
-	if page < 1 {
-		page = 1
-	}
-	query := url.Values{
-		"keyword":     []string{keyword},
-		"search_type": []string{searchType},
-		"page":        []string{fmt.Sprintf("%d", page)},
-		"page_size":   []string{"20"},
-		"platform":    []string{"pc"},
-		"web_location": []string{"1430654"},
-		"order":       []string{"pubdate"},
-		"order_avoided": []string{"true"},
-	}
-	requestCredential := c.credentialWithDevice(ctx, nil)
-	var data map[string]any
-	var requestErr error
-	if signed, signErr := c.signWBI(ctx, query, requestCredential); signErr == nil {
-		requestErr = c.request(ctx, http.MethodGet, "/x/web-interface/wbi/search/type", signed, nil, requestCredential, &data)
-	} else {
-		requestErr = signErr
-	}
-	if requestErr != nil {
-		if CodeOf(requestErr) == CodeRateLimited {
-			return nil, withAction(action, requestErr)
-		}
-		fallbackQuery := url.Values{
-			"keyword":     []string{keyword},
-			"search_type": []string{searchType},
-			"page":        []string{fmt.Sprintf("%d", page)},
-		}
-		requestErr = c.request(ctx, http.MethodGet, "/x/web-interface/search/type", fallbackQuery, nil, requestCredential, &data)
-	}
-	if requestErr != nil {
-		return nil, withAction(action, requestErr)
-	}
-	return mapList(mapValue(data)["result"]), nil
-}
-
 func (c *Client) GetFollowings(ctx context.Context, uid int64, page, size int, cred *Credential) (map[string]any, error) {
 	if page < 1 {
 		page = 1

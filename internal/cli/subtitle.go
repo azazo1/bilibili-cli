@@ -75,8 +75,8 @@ func newSubtitleCommand(app *App) *cobra.Command {
 				}
 			}
 			payload := subtitleCommandPayload(bvid, availableTrackCount, items, warnings, outputPath)
-			return app.Complete(payload, mode, func(w io.Writer) {
-				renderSubtitleList(w, bvid, availableTrackCount, items, outputPath)
+			return app.CompleteTable(payload, mode, asJSON, asYAML, func(w io.Writer) {
+				renderSubtitleList(app, w, bvid, availableTrackCount, items, outputPath)
 			})
 		},
 	}
@@ -264,7 +264,7 @@ func subtitleCharacterCount(cues []api.SubtitleCue) int {
 	return count
 }
 
-func renderSubtitleList(w io.Writer, bvid string, availableTrackCount int, items []subtitleCommandItem, outputPath string) {
+func renderSubtitleList(app *App, w io.Writer, bvid string, availableTrackCount int, items []subtitleCommandItem, outputPath string) {
 	if len(items) == 0 {
 		if availableTrackCount == 0 {
 			fmt.Fprintln(w, "无可用字幕")
@@ -306,7 +306,7 @@ func renderSubtitleList(w io.Writer, bvid string, availableTrackCount int, items
 			status,
 		})
 	}
-	renderTable(w, "字幕列表: "+bvid, []string{"#", "ID", "语言", "名称", "类型", "作者", "行数", "状态"}, rows)
+	app.renderTable(w, "字幕列表: "+bvid, []string{"#", "ID", "语言", "名称", "类型", "作者", "行数", "状态"}, rows)
 	if outputPath == "" {
 		return
 	}

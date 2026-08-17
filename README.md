@@ -6,7 +6,7 @@
 
 - 视频详情, AI 总结, 评论和相关推荐.
 - 字幕轨道列出与导出, 覆盖普通字幕和平台标记的 AI 字幕.
-- UP 主资料, 视频列表, 用户和视频搜索.
+- UP 主资料, 视频列表, 专栏, 视频, 用户, 番剧, 直播和影视搜索.
 - 热门视频, 排行榜, 收藏夹, 关注, 历史和稍后再看.
 - 动态时间线, 我的动态, 文字动态发布和删除.
 - 点赞, 投币, 一键三连和取消关注.
@@ -75,13 +75,25 @@ confirm_dangerous_actions = true
 
 ## 输出
 
-查询命令支持 `--json` 和 `--yaml`. 非交互 stdout 默认输出 YAML. 成功和失败都使用统一结构:
+查询命令支持 `--json` 和 `--yaml`. 非交互 stdout 的表格默认输出 TSV, 其他查询命令默认输出 YAML. 成功和失败都使用统一结构:
 
 ```yaml
 ok: true
 schema_version: "1"
 data: {}
 ```
+
+## 搜索
+
+```shell
+bili search "关键词" --type video --order totalrank
+bili search "关键词" --type article --order pubdate
+bili search "关键词" --type bangumi --order click
+```
+
+`--type` 支持 `article`, `video`, `user`, `bangumi`, `live`, `media`.
+`--order` 支持 `totalrank`, `click`, `pubdate`, `dm`, `stow`.
+表格在 PTY 中会按终端宽度对齐并截断可变长列. `--no-truncate` 可关闭截断. 非 PTY 的表格输出为未截断 TSV.
 
 ## 开发
 

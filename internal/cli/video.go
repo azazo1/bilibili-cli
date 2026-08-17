@@ -63,8 +63,8 @@ func newVideoCommand(app *App) *cobra.Command {
 				}
 			}
 			payload := model.NormalizeVideoCommandPayload(info, aiSummary, commentItems, relatedItems, warnings)
-			return app.Complete(payload, mode, func(w io.Writer) {
-				renderVideo(w, info, bvid)
+			return app.CompleteTable(payload, mode, asJSON, asYAML, func(w io.Writer) {
+				renderVideo(app, w, info, bvid)
 				if showAI {
 					fmt.Fprintln(w, "\nAI 总结:")
 					if aiSummary == "" {
@@ -86,9 +86,9 @@ func newVideoCommand(app *App) *cobra.Command {
 					for index, item := range relatedItems[:min(len(relatedItems), 10)] {
 						owner := mapValue(item["owner"])
 						stat := mapValue(item["stat"])
-						rows = append(rows, []string{fmt.Sprintf("%d", index+1), stringValue(item["bvid"]), truncate(stringValue(item["title"]), 40), truncate(stringValue(owner["name"]), 12), formatCount(stat["view"])})
+						rows = append(rows, []string{fmt.Sprintf("%d", index+1), stringValue(item["bvid"]), stringValue(item["title"]), stringValue(owner["name"]), formatCount(stat["view"])})
 					}
-					renderTable(w, "\n相关推荐", []string{"#", "BV号", "标题", "UP主", "播放"}, rows)
+					app.renderTable(w, "\n相关推荐", []string{"#", "BV号", "标题", "UP主", "播放"}, rows)
 				}
 			})
 		},
@@ -110,7 +110,7 @@ func newVideoCommand(app *App) *cobra.Command {
 	return command
 }
 
-func renderVideo(w io.Writer, info map[string]any, bvid string) {
+func renderVideo(app *App, w io.Writer, info map[string]any, bvid string) {
 	owner := mapValue(info["owner"])
 	stat := mapValue(info["stat"])
 	rows := [][]string{
@@ -127,9 +127,9 @@ func renderVideo(w io.Writer, info map[string]any, bvid string) {
 		{"链接", "https://www.bilibili.com/video/" + bvid},
 	}
 	if description := stringValue(info["desc"]); description != "" {
-		rows = append(rows, []string{"简介", truncate(description, 200)})
+		rows = append(rows, []string{"简介", description})
 	}
-	renderTable(w, "视频详情", []string{"字段", "内容"}, rows)
+	app.renderTable(w, "视频详情", []string{"字段", "内容"}, rows)
 }
 
 func min(left, right int) int {

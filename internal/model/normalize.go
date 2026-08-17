@@ -244,31 +244,6 @@ func NormalizeComment(item map[string]any) map[string]any {
 	}
 }
 
-func NormalizeSearchUser(item map[string]any) map[string]any {
-	return map[string]any{
-		"id":     String(item["mid"]),
-		"name":   String(item["uname"]),
-		"sign":   String(item["usign"]),
-		"fans":   ToInt(item["fans"], 0),
-		"videos": ToInt(item["videos"], 0),
-	}
-}
-
-func NormalizeSearchVideo(item map[string]any) map[string]any {
-	duration := String(item["duration"])
-	if duration == "" {
-		duration = FormatDuration(item["duration"])
-	}
-	return map[string]any{
-		"id":       String(item["bvid"]),
-		"bvid":     String(item["bvid"]),
-		"title":    StripHTML(item["title"]),
-		"author":   String(item["author"]),
-		"play":     ToInt(item["play"], 0),
-		"duration": duration,
-	}
-}
-
 func NormalizeFavoriteFolder(item map[string]any) map[string]any {
 	return map[string]any{
 		"id":          ToInt(item["id"], 0),

@@ -103,6 +103,16 @@ func (a *App) Complete(data any, mode output.Mode, render func(io.Writer)) error
 	return nil
 }
 
+func (a *App) CompleteTable(data any, mode output.Mode, asJSON, asYAML bool, render func(io.Writer)) error {
+	if !asJSON && !asYAML && mode == output.ModeYAML && a.Out != nil && a.Out.UsesAutoMode() {
+		if render != nil {
+			render(a.Out.Stdout)
+		}
+		return nil
+	}
+	return a.Complete(data, mode, render)
+}
+
 func (a *App) Execute(ctx context.Context) error {
 	root := NewRoot(a)
 	command, err := root.ExecuteContextC(ctx)

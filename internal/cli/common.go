@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"regexp"
 	"strings"
@@ -34,16 +33,12 @@ func (a *App) apiFailure(err error, action string, mode output.Mode) error {
 	return a.Fail(err, action, mode)
 }
 
-func renderTable(w io.Writer, title string, headers []string, rows [][]string) {
-	if title != "" {
-		fmt.Fprintln(w, title)
+func (a *App) renderTable(w io.Writer, title string, headers []string, rows [][]string) {
+	if a.Out != nil {
+		a.Out.RenderTable(w, title, headers, rows)
+		return
 	}
-	if len(headers) > 0 {
-		fmt.Fprintln(w, strings.Join(headers, "\t"))
-	}
-	for _, row := range rows {
-		fmt.Fprintln(w, strings.Join(row, "\t"))
-	}
+	output.RenderTable(w, title, headers, rows, output.TableOptions{})
 }
 
 func truncate(value string, max int) string {

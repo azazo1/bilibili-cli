@@ -36,9 +36,9 @@ func newHotCommand(app *App) *cobra.Command {
 				payloadItems = append(payloadItems, model.NormalizeVideoSummary(item))
 			}
 			payload := map[string]any{"items": payloadItems, "page": page, "count": count}
-			return app.Complete(payload, mode, func(w io.Writer) {
+			return app.CompleteTable(payload, mode, asJSON, asYAML, func(w io.Writer) {
 				rows := videoRows(items, false)
-				renderTable(w, "热门视频", []string{"#", "BV号", "标题", "UP主", "播放", "点赞"}, rows)
+				app.renderTable(w, "热门视频", []string{"#", "BV号", "标题", "UP主", "播放", "点赞"}, rows)
 			})
 		},
 	}
@@ -75,14 +75,14 @@ func newRankCommand(app *App) *cobra.Command {
 				payloadItems = append(payloadItems, model.NormalizeVideoSummary(item))
 			}
 			payload := map[string]any{"items": payloadItems, "day": day, "count": count}
-			return app.Complete(payload, mode, func(w io.Writer) {
+			return app.CompleteTable(payload, mode, asJSON, asYAML, func(w io.Writer) {
 				rows := make([][]string, 0, len(items))
 				for index, item := range items {
 					owner := mapValue(item["owner"])
 					stat := mapValue(item["stat"])
-					rows = append(rows, []string{fmt.Sprintf("%d", index+1), stringValue(item["bvid"]), truncate(stringValue(item["title"]), 36), truncate(stringValue(owner["name"]), 12), formatCount(stat["view"]), stringValue(item["score"])})
+					rows = append(rows, []string{fmt.Sprintf("%d", index+1), stringValue(item["bvid"]), stringValue(item["title"]), stringValue(owner["name"]), formatCount(stat["view"]), stringValue(item["score"])})
 				}
-				renderTable(w, "全站排行榜", []string{"#", "BV号", "标题", "UP主", "播放", "综合分"}, rows)
+				app.renderTable(w, "全站排行榜", []string{"#", "BV号", "标题", "UP主", "播放", "综合分"}, rows)
 			})
 		},
 	}
@@ -101,7 +101,7 @@ func videoRows(items []map[string]any, rank bool) [][]string {
 		if rank {
 			last = stringValue(item["score"])
 		}
-		rows = append(rows, []string{fmt.Sprintf("%d", index+1), stringValue(item["bvid"]), truncate(stringValue(item["title"]), 36), truncate(stringValue(owner["name"]), 12), formatCount(stat["view"]), last})
+		rows = append(rows, []string{fmt.Sprintf("%d", index+1), stringValue(item["bvid"]), stringValue(item["title"]), stringValue(owner["name"]), formatCount(stat["view"]), last})
 	}
 	return rows
 }

@@ -53,12 +53,12 @@ func newFavoritesCommand(app *App) *cobra.Command {
 				for _, item := range folders {
 					payload = append(payload, model.NormalizeFavoriteFolder(item))
 				}
-				return app.Complete(payload, mode, func(w io.Writer) {
+				return app.CompleteTable(payload, mode, asJSON, asYAML, func(w io.Writer) {
 					rows := make([][]string, 0, len(folders))
 					for _, item := range folders {
 						rows = append(rows, []string{stringValue(item["id"]), stringValue(item["title"]), stringValue(item["media_count"])})
 					}
-					renderTable(w, "收藏夹列表", []string{"ID", "名称", "视频数"}, rows)
+					app.renderTable(w, "收藏夹列表", []string{"ID", "名称", "视频数"}, rows)
 				})
 			}
 			favID, parseErr := strconv.ParseInt(args[0], 10, 64)
@@ -75,13 +75,13 @@ func newFavoritesCommand(app *App) *cobra.Command {
 				items = append(items, model.NormalizeFavoriteMedia(item))
 			}
 			payload := map[string]any{"folder_id": favID, "page": page, "has_more": boolValue(data["has_more"]), "items": items}
-			return app.Complete(payload, mode, func(w io.Writer) {
+			return app.CompleteTable(payload, mode, asJSON, asYAML, func(w io.Writer) {
 				rows := make([][]string, 0, len(medias))
 				for index, item := range medias {
 					upper := mapValue(item["upper"])
-					rows = append(rows, []string{fmt.Sprintf("%d", index+1+(page-1)*20), stringValue(item["bvid"]), truncate(stringValue(item["title"]), 40), truncate(stringValue(upper["name"]), 12), formatDuration(item["duration"])})
+					rows = append(rows, []string{fmt.Sprintf("%d", index+1+(page-1)*20), stringValue(item["bvid"]), stringValue(item["title"]), stringValue(upper["name"]), formatDuration(item["duration"])})
 				}
-				renderTable(w, fmt.Sprintf("收藏夹 #%d (第 %d 页)", favID, page), []string{"#", "BV号", "标题", "UP主", "时长"}, rows)
+				app.renderTable(w, fmt.Sprintf("收藏夹 #%d (第 %d 页)", favID, page), []string{"#", "BV号", "标题", "UP主", "时长"}, rows)
 				if boolValue(data["has_more"]) {
 					fmt.Fprintf(w, "还有更多内容, 使用 bili me fav %d --page %d 查看下一页\n", favID, page+1)
 				}
@@ -127,12 +127,12 @@ func newFollowingCommand(app *App) *cobra.Command {
 				items = append(items, model.NormalizeFollowingUser(item))
 			}
 			payload := map[string]any{"page": page, "total": intValue(data["total"], 0), "items": items}
-			return app.Complete(payload, mode, func(w io.Writer) {
+			return app.CompleteTable(payload, mode, asJSON, asYAML, func(w io.Writer) {
 				rows := make([][]string, 0, len(users))
 				for index, item := range users {
-					rows = append(rows, []string{fmt.Sprintf("%d", index+1+(page-1)*20), stringValue(item["mid"]), stringValue(item["uname"]), truncate(stringValue(item["sign"]), 40)})
+					rows = append(rows, []string{fmt.Sprintf("%d", index+1+(page-1)*20), stringValue(item["mid"]), stringValue(item["uname"]), stringValue(item["sign"])})
 				}
-				renderTable(w, fmt.Sprintf("关注列表 (共 %d, 第 %d 页)", intValue(data["total"], 0), page), []string{"#", "UID", "用户名", "签名"}, rows)
+				app.renderTable(w, fmt.Sprintf("关注列表 (共 %d, 第 %d 页)", intValue(data["total"], 0), page), []string{"#", "UID", "用户名", "签名"}, rows)
 				fmt.Fprintf(w, "使用 bili me following --page %d 查看下一页\n", page+1)
 			})
 		},
@@ -173,15 +173,15 @@ func newHistoryCommand(app *App) *cobra.Command {
 				normalized = append(normalized, model.NormalizeHistoryItem(item))
 			}
 			payload := map[string]any{"page": page, "count": len(normalized), "items": normalized}
-			return app.Complete(payload, mode, func(w io.Writer) {
+			return app.CompleteTable(payload, mode, asJSON, asYAML, func(w io.Writer) {
 				rows := make([][]string, 0, len(items))
 				for index, item := range items {
 					historyInfo := mapValue(item["history"])
 					owner := mapValue(item["owner"])
 					viewAt := int64Value(firstNonNil(historyInfo["view_at"], item["view_at"]), 0)
-					rows = append(rows, []string{fmt.Sprintf("%d", index+1), firstString(historyInfo["bvid"], item["bvid"], historyInfo["oid"]), truncate(firstString(item["title"], item["name"]), 36), truncate(firstString(owner["name"], item["author_name"], item["author"]), 12), timestampDisplay(viewAt)})
+					rows = append(rows, []string{fmt.Sprintf("%d", index+1), firstString(historyInfo["bvid"], item["bvid"], historyInfo["oid"]), firstString(item["title"], item["name"]), firstString(owner["name"], item["author_name"], item["author"]), timestampDisplay(viewAt)})
 				}
-				renderTable(w, fmt.Sprintf("观看历史 (第 %d 页)", page), []string{"#", "标识", "标题", "UP主", "观看时间"}, rows)
+				app.renderTable(w, fmt.Sprintf("观看历史 (第 %d 页)", page), []string{"#", "标识", "标题", "UP主", "观看时间"}, rows)
 			})
 		},
 	}
@@ -216,13 +216,13 @@ func newWatchLaterCommand(app *App) *cobra.Command {
 				normalized = append(normalized, model.NormalizeWatchLaterItem(item))
 			}
 			payload := map[string]any{"count": intValue(data["count"], len(items)), "items": normalized}
-			return app.Complete(payload, mode, func(w io.Writer) {
+			return app.CompleteTable(payload, mode, asJSON, asYAML, func(w io.Writer) {
 				rows := make([][]string, 0, min(len(items), 30))
 				for index, item := range items[:min(len(items), 30)] {
 					owner := mapValue(item["owner"])
-					rows = append(rows, []string{fmt.Sprintf("%d", index+1), stringValue(item["bvid"]), truncate(stringValue(item["title"]), 36), truncate(stringValue(owner["name"]), 12), formatDuration(item["duration"])})
+					rows = append(rows, []string{fmt.Sprintf("%d", index+1), stringValue(item["bvid"]), stringValue(item["title"]), stringValue(owner["name"]), formatDuration(item["duration"])})
 				}
-				renderTable(w, fmt.Sprintf("稍后再看 (共 %d 个)", intValue(data["count"], len(items))), []string{"#", "BV号", "标题", "UP主", "时长"}, rows)
+				app.renderTable(w, fmt.Sprintf("稍后再看 (共 %d 个)", intValue(data["count"], len(items))), []string{"#", "BV号", "标题", "UP主", "时长"}, rows)
 			})
 		},
 	}
@@ -339,12 +339,12 @@ func newMyDynamicsCommand(app *App) *cobra.Command {
 				normalized = append(normalized, model.NormalizeDynamicItem(card))
 			}
 			payload := map[string]any{"offset": offset, "next_offset": firstString(data["next_offset"], data["offset"]), "items": normalized}
-			return app.Complete(payload, mode, func(w io.Writer) {
+			return app.CompleteTable(payload, mode, asJSON, asYAML, func(w io.Writer) {
 				rows := make([][]string, 0, len(cards))
 				for _, card := range cards {
-					rows = append(rows, []string{fmt.Sprintf("%d", dynamicID(card)), timestampDisplay(dynamicTimestamp(card)), truncate(decodeDynamicText(card), 60)})
+					rows = append(rows, []string{fmt.Sprintf("%d", dynamicID(card)), timestampDisplay(dynamicTimestamp(card)), decodeDynamicText(card)})
 				}
-				renderTable(w, fmt.Sprintf("我的动态 (offset=%d)", offset), []string{"动态ID", "发布时间", "内容"}, rows)
+				app.renderTable(w, fmt.Sprintf("我的动态 (offset=%d)", offset), []string{"动态ID", "发布时间", "内容"}, rows)
 				next := firstString(data["next_offset"], data["offset"])
 				if next != "" && next != strconv.FormatInt(offset, 10) {
 					fmt.Fprintf(w, "下一页: bili me dynamic --offset %s\n", next)

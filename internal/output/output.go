@@ -25,6 +25,7 @@ type Writer struct {
 	Stdout     io.Writer
 	Stderr     io.Writer
 	DefaultMode string
+	NoTruncate bool
 }
 
 func NewWriter() *Writer {
@@ -57,6 +58,15 @@ func (w *Writer) Resolve(asJSON, asYAML bool) (Mode, error) {
 		return ModeYAML, nil
 	}
 	return ModeRich, nil
+}
+
+func (w *Writer) UsesAutoMode() bool {
+	configuredMode, hasEnvironmentMode := os.LookupEnv("OUTPUT")
+	if !hasEnvironmentMode || strings.TrimSpace(configuredMode) == "" {
+		configuredMode = w.DefaultMode
+	}
+	configuredMode = strings.TrimSpace(configuredMode)
+	return configuredMode == "" || strings.EqualFold(configuredMode, "auto")
 }
 
 func Success(data any) map[string]any {
@@ -112,11 +122,22 @@ func (w *Writer) EmitErrorWithDetails(err error, action string, mode Mode, detai
 	return writeErr
 }
 
+func (w *Writer) RenderTable(destination io.Writer, title string, headers []string, rows [][]string) {
+	if destination == nil {
+		destination = w.Stdout
+	}
+	RenderTable(destination, title, headers, rows, TableOptions{
+		Interactive: isTTY(destination),
+		Width:       terminalWidth(destination),
+		NoTruncate:  w.NoTruncate,
+	})
+}
+
 func isTTY(writer io.Writer) bool {
 	file, ok := writer.(*os.File)
 	if !ok {
 		return false
 	}
 	info, err := file.Stat()
-	return err == nil && info.Mode()&os.ModeCharDevice != 0
+	return err == nil && info.Mode()&os.ModeCharDevice != 0 && terminalWidthForFile(file) > 0
 }

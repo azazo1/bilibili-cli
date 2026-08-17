@@ -101,87 +101,20 @@ func newUserVideosCommand(app *App) *cobra.Command {
 			for _, video := range videos {
 				payload = append(payload, model.NormalizeVideoSummary(video))
 			}
-			return app.Complete(payload, mode, func(w io.Writer) {
+			return app.CompleteTable(payload, mode, asJSON, asYAML, func(w io.Writer) {
 				rows := make([][]string, 0, len(videos))
 				for index, video := range videos {
-					rows = append(rows, []string{fmt.Sprintf("%d", index+1), stringValue(video["bvid"]), truncate(stringValue(video["title"]), 40), videoLength(video["length"]), formatCount(video["play"])})
+					rows = append(rows, []string{fmt.Sprintf("%d", index+1), stringValue(video["bvid"]), stringValue(video["title"]), videoLength(video["length"]), formatCount(video["play"])})
 				}
 				if len(rows) == 0 {
 					fmt.Fprintln(w, "该用户暂无视频")
 					return
 				}
-				renderTable(w, fmt.Sprintf("最新 %d 个视频", len(rows)), []string{"#", "BV号", "标题", "时长", "播放"}, rows)
+				app.renderTable(w, fmt.Sprintf("最新 %d 个视频", len(rows)), []string{"#", "BV号", "标题", "时长", "播放"}, rows)
 			})
 		},
 	}
 	command.Flags().IntVarP(&count, "max", "n", 10, "显示的视频数量")
-	addStructuredFlags(command, &asJSON, &asYAML)
-	return command
-}
-
-func newSearchCommand(app *App) *cobra.Command {
-	var searchType string
-	var page, count int
-	var asJSON, asYAML bool
-	command := &cobra.Command{
-		Use:   "search KEYWORD",
-		Short: "搜索用户或视频",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			mode, err := app.mode(cmd, asJSON, asYAML)
-			if err != nil {
-				return err
-			}
-			if page < 1 || count < 1 {
-				return app.invalidInput(cmd, "--page 和 --max 必须大于 0", mode)
-			}
-			if searchType != "user" && searchType != "video" {
-				return app.invalidInput(cmd, "--type 仅支持 user 或 video", mode)
-			}
-			ctx := contextOrBackground(cmd.Context())
-			if searchType == "video" {
-				results, fetchErr := app.API.SearchVideo(ctx, args[0], page)
-				if fetchErr != nil {
-					return app.apiFailure(fetchErr, "搜索视频失败", mode)
-				}
-				if len(results) > count {
-					results = results[:count]
-				}
-				payload := make([]map[string]any, 0, len(results))
-				for _, item := range results {
-					payload = append(payload, model.NormalizeSearchVideo(item))
-				}
-				return app.Complete(payload, mode, func(w io.Writer) {
-					rows := make([][]string, 0, len(results))
-					for index, item := range results {
-						rows = append(rows, []string{fmt.Sprintf("%d", index+1), stringValue(item["bvid"]), truncate(stripHTML(stringValue(item["title"])), 40), truncate(stringValue(item["author"]), 12), formatCount(item["play"]), stringValue(item["duration"])})
-					}
-					renderTable(w, "视频搜索: "+args[0], []string{"#", "BV号", "标题", "UP主", "播放", "时长"}, rows)
-				})
-			}
-			results, fetchErr := app.API.SearchUser(ctx, args[0], page)
-			if fetchErr != nil {
-				return app.apiFailure(fetchErr, "搜索用户失败", mode)
-			}
-			if len(results) > count {
-				results = results[:count]
-			}
-			payload := make([]map[string]any, 0, len(results))
-			for _, item := range results {
-				payload = append(payload, model.NormalizeSearchUser(item))
-			}
-			return app.Complete(payload, mode, func(w io.Writer) {
-				rows := make([][]string, 0, len(results))
-				for _, item := range results {
-					rows = append(rows, []string{stringValue(item["mid"]), stringValue(item["uname"]), formatCount(item["fans"]), fmt.Sprintf("%d", intValue(item["videos"], 0)), truncate(stringValue(item["usign"]), 40)})
-				}
-				renderTable(w, "搜索: "+args[0], []string{"UID", "用户名", "粉丝", "视频数", "签名"}, rows)
-			})
-		},
-	}
-	command.Flags().StringVar(&searchType, "type", "user", "搜索类型: user 或 video")
-	command.Flags().IntVar(&page, "page", 1, "页码")
-	command.Flags().IntVarP(&count, "max", "n", 20, "显示数量")
 	addStructuredFlags(command, &asJSON, &asYAML)
 	return command
 }
