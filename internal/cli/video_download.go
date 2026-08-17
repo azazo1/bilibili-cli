@@ -23,7 +23,7 @@ type videoDownloadItem struct {
 
 func newVideoDownloadCommand(app *App) *cobra.Command {
 	var outputDir string
-	var audioOnly, videoOnly, noMerge bool
+	var audioOnly, videoOnly, noMerge, withSRT bool
 	command := &cobra.Command{
 		Use:   "download BV_OR_URL",
 		Short: "下载视频音频和视频",
@@ -101,6 +101,16 @@ func newVideoDownloadCommand(app *App) *cobra.Command {
 					}
 				}
 			}
+			if withSRT {
+				fmt.Fprintln(app.Out.Stdout, "尝试下载匹配字幕...")
+				subtitlePath, subtitleErr := app.downloadPreferredSubtitle(ctx, reference.BVID, reference.Page, outDir, fileTitle, credential)
+				if subtitleErr != nil {
+					app.Logger.Warn("自动下载字幕失败, 继续视频下载", "bvid", reference.BVID, "page", reference.Page, "error", subtitleErr)
+					fmt.Fprintf(app.Out.Stdout, "字幕下载失败, 继续完成视频下载: %v\n", subtitleErr)
+				} else {
+					fmt.Fprintf(app.Out.Stdout, "字幕已保存: %s\n", subtitlePath)
+				}
+			}
 			return nil
 		},
 	}
@@ -108,6 +118,7 @@ func newVideoDownloadCommand(app *App) *cobra.Command {
 	command.Flags().BoolVar(&audioOnly, "audio-only", false, "仅下载音频")
 	command.Flags().BoolVar(&videoOnly, "video-only", false, "仅下载视频")
 	command.Flags().BoolVar(&noMerge, "no-merge", false, "不尝试合并音频和视频")
+	command.Flags().BoolVar(&withSRT, "with-srt", false, "自动下载一条匹配字幕")
 	return command
 }
 

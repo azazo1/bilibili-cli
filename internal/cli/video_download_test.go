@@ -41,6 +41,25 @@ func TestVideoDownloadCommandDownloadsBothStreamsInReadOnlyMode(t *testing.T) {
 	}
 }
 
+func TestVideoDownloadWithSRTUsesVideoBaseName(t *testing.T) {
+	server := newVideoDownloadTestServer(t)
+	defer server.Close()
+
+	app := newTestApp(t)
+	app.API.BaseURL = server.URL
+	app.API.HTTP = server.Client()
+	app.Out = &output.Writer{Stdout: io.Discard, Stderr: io.Discard, DefaultMode: "rich"}
+	outDir := t.TempDir()
+	root := NewRoot(app)
+	root.SetArgs([]string{"video", "download", "BV1ABcsztEcY", "-o", outDir, "--no-merge", "--with-srt"})
+	if err := root.ExecuteContext(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(outDir, "demo.zh-CN.srt")); err != nil {
+		t.Fatalf("missing matching subtitle: %v", err)
+	}
+}
+
 func TestVideoDownloadCommandRejectsConflictingStreamFlags(t *testing.T) {
 	app := newTestApp(t)
 	app.Out = &output.Writer{Stdout: io.Discard, Stderr: io.Discard, DefaultMode: "rich"}
@@ -151,6 +170,10 @@ func newVideoDownloadTestServer(t *testing.T) *httptest.Server {
 			fmt.Fprintf(w, `{"code":0,"data":{"wbi_img":{"img_url":"%s/wbi/0123456789abcdef0123456789abcdef.png","sub_url":"%s/wbi/fedcba9876543210fedcba9876543210.png"}}}`, serverURL, serverURL)
 		case "/x/player/wbi/playurl":
 			fmt.Fprint(w, `{"code":0,"data":{"dash":{"audio":[{"base_url":"`+serverURL+`/audio.m4s"}],"video":[{"base_url":"`+serverURL+`/video.m4s"}]}}}`)
+		case "/x/player/v2":
+			fmt.Fprintf(w, `{"code":0,"data":{"subtitle":{"subtitles":[{"id":11,"lan":"zh-CN","lan_doc":"中文","subtitle_url":"%s/subtitle.json","type":0}]}}}`, serverURL)
+		case "/subtitle.json":
+			fmt.Fprint(w, `{"body":[{"from":0,"to":1,"content":"subtitle"}]}`)
 		case "/audio.m4s":
 			_, _ = w.Write([]byte("audio"))
 		case "/video.m4s":
