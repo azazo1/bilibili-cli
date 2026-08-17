@@ -19,23 +19,25 @@ import (
 
 const defaultBaseURL = "https://api.bilibili.com"
 const defaultVCBaseURL = "https://api.vc.bilibili.com"
+const defaultPassportBaseURL = "https://passport.bilibili.com"
 
 const userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
 
 type Client struct {
-	BaseURL   string
-	VCBaseURL string
-	HTTP      *http.Client
-	UserAgent string
-	Logger    *slog.Logger
-	wbiMu     sync.Mutex
-	wbiKey    string
-	wbiExpires time.Time
-	deviceMu  sync.Mutex
-	device    *Credential
-	deviceExpires time.Time
-	webIDMu   sync.Mutex
-	webIDs    map[int64]webIDEntry
+	BaseURL         string
+	VCBaseURL       string
+	PassportBaseURL string
+	HTTP            *http.Client
+	UserAgent       string
+	Logger          *slog.Logger
+	wbiMu           sync.Mutex
+	wbiKey          string
+	wbiExpires      time.Time
+	deviceMu        sync.Mutex
+	device          *Credential
+	deviceExpires   time.Time
+	webIDMu         sync.Mutex
+	webIDs          map[int64]webIDEntry
 }
 
 func NewClient() *Client {
@@ -47,6 +49,10 @@ func NewClient() *Client {
 	if vcBase == "" {
 		vcBase = defaultVCBaseURL
 	}
+	passportBase := strings.TrimRight(strings.TrimSpace(os.Getenv("BILI_PASSPORT_BASE_URL")), "/")
+	if passportBase == "" {
+		passportBase = defaultPassportBaseURL
+	}
 	timeout := 30 * time.Second
 	if raw := strings.TrimSpace(os.Getenv("BILI_HTTP_TIMEOUT")); raw != "" {
 		if seconds, err := strconv.Atoi(raw); err == nil && seconds > 0 {
@@ -54,11 +60,12 @@ func NewClient() *Client {
 		}
 	}
 	return &Client{
-		BaseURL:   base,
-		VCBaseURL: vcBase,
-		HTTP:      &http.Client{Timeout: timeout},
-		UserAgent: userAgent,
-		Logger:    slog.Default(),
+		BaseURL:         base,
+		VCBaseURL:       vcBase,
+		PassportBaseURL: passportBase,
+		HTTP:            &http.Client{Timeout: timeout},
+		UserAgent:       userAgent,
+		Logger:          slog.Default(),
 	}
 }
 
@@ -73,21 +80,33 @@ func (c *Client) SetTimeout(seconds int) {
 }
 
 func (c *Client) URL(path string) string {
-	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
-		return path
-	}
-	return strings.TrimRight(c.BaseURL, "/") + "/" + strings.TrimLeft(path, "/")
+	return joinURL(c.BaseURL, defaultBaseURL, path)
 }
 
 func (c *Client) VCURL(path string) string {
+	return joinURL(c.VCBaseURL, defaultVCBaseURL, path)
+}
+
+func (c *Client) PassportURL(path string) string {
+	return joinURL(c.PassportBaseURL, defaultPassportBaseURL, path)
+}
+
+func joinURL(base, fallback, path string) string {
 	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
 		return path
 	}
-	return strings.TrimRight(c.VCBaseURL, "/") + "/" + strings.TrimLeft(path, "/")
+	if strings.TrimSpace(base) == "" {
+		base = fallback
+	}
+	return strings.TrimRight(base, "/") + "/" + strings.TrimLeft(path, "/")
 }
 
 func (c *Client) Request(ctx context.Context, method, path string, query url.Values, form url.Values, cred *Credential, out any) error {
 	return c.request(ctx, method, path, query, form, cred, out)
+}
+
+func (c *Client) RequestPassport(ctx context.Context, method, path string, query url.Values, form url.Values, cred *Credential, out any) error {
+	return c.requestAtBase(ctx, method, c.PassportBaseURL, defaultPassportBaseURL, path, query, form, cred, out)
 }
 
 func (c *Client) RequestJSON(ctx context.Context, method, path string, query url.Values, payload any, cred *Credential, out any) error {
@@ -101,13 +120,17 @@ type envelope struct {
 }
 
 func (c *Client) request(ctx context.Context, method, path string, query url.Values, form url.Values, cred *Credential, out any) error {
+	return c.requestAtBase(ctx, method, c.BaseURL, defaultBaseURL, path, query, form, cred, out)
+}
+
+func (c *Client) requestAtBase(ctx context.Context, method, base, fallback, path string, query url.Values, form url.Values, cred *Credential, out any) error {
 	var body io.Reader
 	contentType := ""
 	if form != nil {
 		body = strings.NewReader(form.Encode())
 		contentType = "application/x-www-form-urlencoded"
 	}
-	return c.requestWithBody(ctx, method, path, query, body, contentType, cred, out)
+	return c.requestWithBody(ctx, method, joinURL(base, fallback, path), query, body, contentType, cred, out)
 }
 
 func (c *Client) requestJSON(ctx context.Context, method, path string, query url.Values, payload any, cred *Credential, out any) error {
@@ -115,11 +138,10 @@ func (c *Client) requestJSON(ctx context.Context, method, path string, query url
 	if err != nil {
 		return &Error{Code: CodeInvalidInput, Message: "JSON 请求体编码失败", Err: err}
 	}
-	return c.requestWithBody(ctx, method, path, query, bytes.NewReader(encoded), "application/json", cred, out)
+	return c.requestWithBody(ctx, method, c.URL(path), query, bytes.NewReader(encoded), "application/json", cred, out)
 }
 
-func (c *Client) requestWithBody(ctx context.Context, method, path string, query url.Values, body io.Reader, contentType string, cred *Credential, out any) error {
-	requestURL := c.URL(path)
+func (c *Client) requestWithBody(ctx context.Context, method, requestURL string, query url.Values, body io.Reader, contentType string, cred *Credential, out any) error {
 	if len(query) > 0 {
 		requestURL += "?" + query.Encode()
 	}

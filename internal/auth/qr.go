@@ -27,7 +27,7 @@ type qrPollEnvelope struct {
 
 func (s *Store) QRLogin(ctx context.Context, out io.Writer) (*api.Credential, error) {
 	var generated qrGenerateResponse
-	if err := s.Client.Request(ctx, http.MethodGet, "/x/passport-login/web/qrcode/generate", nil, nil, nil, &generated); err != nil {
+	if err := s.Client.RequestPassport(ctx, http.MethodGet, "/x/passport-login/web/qrcode/generate", nil, nil, nil, &generated); err != nil {
 		return nil, api.NewError(api.CodeNetwork, "登录", err.Error())
 	}
 	if generated.URL == "" || generated.QRCodeKey == "" {
@@ -76,12 +76,14 @@ func (s *Store) QRLogin(ctx context.Context, out io.Writer) (*api.Credential, er
 
 func (s *Store) pollQRCode(ctx context.Context, key string) (*api.Credential, string, error) {
 	query := url.Values{"qrcode_key": []string{key}}
-	requestURL := s.Client.URL("/x/passport-login/web/qrcode/poll") + "?" + query.Encode()
+	requestURL := s.Client.PassportURL("/x/passport-login/web/qrcode/poll") + "?" + query.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		return nil, "", err
 	}
 	req.Header.Set("User-Agent", s.Client.UserAgent)
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Referer", "https://www.bilibili.com/")
 	client := s.Client.HTTP
 	if client == nil {
 		client = http.DefaultClient
@@ -91,6 +93,9 @@ func (s *Store) pollQRCode(ctx context.Context, key string) (*api.Credential, st
 		return nil, "", api.NewError(api.CodeNetwork, "登录", err.Error())
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, "", api.NewError(api.CodeNetwork, "登录", fmt.Sprintf("HTTP %d", resp.StatusCode))
+	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, "", api.NewError(api.CodeNetwork, "登录", err.Error())
