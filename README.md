@@ -83,12 +83,14 @@ bili video download BV1ABcsztEcY --with-srt
 
 ```shell
 bili user lists 7855491
+bili user lists "作者名称"
 bili user lists 7855491/8565435
+bili user lists "作者名称/8565435"
 bili user lists "https://space.bilibili.com/7855491/lists?sid=8565435"
 bili user lists https://b23.tv/example
 ```
 
-`bili user lists UID` 显示该 UP 主的全部列表. 传入 `UID/SID` 或 Bilibili 空间列表链接时, 会显示指定列表中的视频. 可以传入 b23 短链, 命令会跟随跳转后解析. `--page` 在 UID 查询时翻阅列表目录, 在指定列表查询时翻阅视频. 命令会自动识别 Bilibili 列表类型并使用统一输出.
+`bili user lists UID_OR_NAME` 显示该 UP 主的全部列表, 用户名解析行为与 `bili user` 一致. 传入 `UID_OR_NAME/SID` 或 Bilibili 空间列表链接时, 会显示指定列表中的视频. 可以传入 b23 短链, 命令会跟随跳转后解析. `--page` 在用户查询时翻阅列表目录, 在指定列表查询时翻阅视频. 命令会自动识别 Bilibili 列表类型并使用统一输出.
 
 ## 图片下载
 
@@ -104,7 +106,7 @@ bili image live 5440 --with-avatar
 
 用户下载头像, 其他对象默认下载封面. `--with-avatar` 会额外下载作者或主播头像. 资源保存为稳定 ID 文件名, 例如 `video-BV1ABcsztEcY-cover.jpg`. 同名文件会直接覆盖. 主图下载成功后, 作者头像不可用只会报告警告而不会删除主图. 可使用 `--json` 或 `--yaml` 输出下载路径, 字节数和警告. 图片下载仅使用读取请求, 在 `safety.read_only = true` 下可用.
 
-其他命令按领域组织在 `bili me`, `bili user`, `bili video` 和 `bili dynamic` 下. 例如 `bili user video UID_OR_NAME`, `bili user lists UID`, `bili user follow UID`, `bili me fav`, `bili video watch` 和 `bili dynamic post TEXT`.
+其他命令按领域组织在 `bili me`, `bili user`, `bili video` 和 `bili dynamic` 下. 例如 `bili user video UID_OR_NAME`, `bili user lists UID_OR_NAME`, `bili user follow UID`, `bili me fav`, `bili video watch` 和 `bili dynamic post TEXT`.
 
 配置和认证默认保存在 `~/.config/bilibili-cli/config.toml` 与 `~/.config/bilibili-cli/auth.json`. 如需从已有 cookie 导入, 可以传入 `BILI_COOKIE` 或 Netscape cookie 文件路径 `BILI_COOKIE_FILE`.
 

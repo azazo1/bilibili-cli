@@ -87,6 +87,52 @@ func TestUserListsCommandWorksInReadOnlyMode(t *testing.T) {
 	}
 }
 
+func TestUserListsCommandResolvesUserName(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/x/frontend/finger/spi":
+			fmt.Fprint(writer, `{"code":0,"data":{"b_3":"b3","b_4":"b4"}}`)
+		case "/x/internal/gaia-gateway/ExClimbWuzhi":
+			fmt.Fprint(writer, `{"code":0}`)
+		case "/x/web-interface/nav":
+			fmt.Fprint(writer, `{"code":0,"data":{"wbi_img":{"img_url":"https://example.com/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png","sub_url":"https://example.com/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png"}}}`)
+		case "/x/web-interface/wbi/search/type":
+			query := request.URL.Query()
+			if query.Get("keyword") != "demo-up" || query.Get("search_type") != "bili_user" {
+				t.Fatalf("unexpected user search query: %s", request.URL.RawQuery)
+			}
+			fmt.Fprint(writer, `{"code":0,"data":{"result":[{"mid":42,"uname":"demo-up"}]}}`)
+		case "/x/polymer/web-space/home/seasons_series":
+			if request.URL.Query().Get("mid") != "42" {
+				t.Fatalf("unexpected list query: %s", request.URL.RawQuery)
+			}
+			fmt.Fprint(writer, `{"code":0,"data":{"items_lists":{"page":{"page_num":1,"page_size":10,"total":1},"seasons_list":[],"series_list":[]}}}`)
+		default:
+			t.Fatalf("unexpected path: %s", request.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	app := newTestApp(t)
+	app.Config.Safety.ReadOnly = true
+	app.API.BaseURL = server.URL
+	app.API.HTTP = server.Client()
+	stdout := &bytes.Buffer{}
+	app.Out = &output.Writer{Stdout: stdout, Stderr: &bytes.Buffer{}, DefaultMode: "rich"}
+	root := NewRoot(app)
+	root.SetArgs([]string{"user", "lists", "demo-up", "--json"})
+	if err := root.ExecuteContext(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope["data"].(map[string]any)["owner"].(map[string]any)["id"] != "42" {
+		t.Fatalf("unexpected resolved user payload: %#v", envelope)
+	}
+}
+
 func TestUserListsCommandLoadsSelectedList(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {

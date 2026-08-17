@@ -10,13 +10,14 @@ import (
 
 	"github.com/azazo1/bilibili-cli/internal/api"
 	"github.com/azazo1/bilibili-cli/internal/model"
+	"github.com/azazo1/bilibili-cli/internal/output"
 )
 
 func newUserListsCommand(app *App) *cobra.Command {
 	var page int
 	var asJSON, asYAML bool
 	command := &cobra.Command{
-		Use:   "lists REF",
+		Use:   "lists UID_OR_NAME_OR_URL",
 		Short: "查看 UP 主的合集和系列列表",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -28,9 +29,9 @@ func newUserListsCommand(app *App) *cobra.Command {
 				return app.invalidInput(cmd, "--page 必须大于 0", mode)
 			}
 			ctx := contextOrBackground(cmd.Context())
-			reference, err := app.API.ResolveUserListReference(ctx, args[0])
+			reference, err := resolveUserListsReference(cmd, app, args[0], mode)
 			if err != nil {
-				return app.invalidInput(cmd, err.Error(), mode)
+				return err
 			}
 			credential := app.OptionalCredential(ctx)
 			if !reference.HasList() {
@@ -58,6 +59,52 @@ func newUserListsCommand(app *App) *cobra.Command {
 	command.Flags().IntVarP(&page, "page", "p", 1, "页码")
 	addStructuredFlags(command, &asJSON, &asYAML)
 	return command
+}
+
+func resolveUserListsReference(cmd *cobra.Command, app *App, input string, mode output.Mode) (api.UserListReference, error) {
+	input = strings.TrimSpace(input)
+	ctx := contextOrBackground(cmd.Context())
+	if isUserListsURLInput(input) {
+		reference, err := app.API.ResolveUserListReference(ctx, input)
+		if err != nil {
+			return api.UserListReference{}, app.invalidInput(cmd, err.Error(), mode)
+		}
+		return reference, nil
+	}
+
+	ownerInput, sid, err := splitUserListsInput(input)
+	if err != nil {
+		return api.UserListReference{}, app.invalidInput(cmd, err.Error(), mode)
+	}
+	ownerID, err := resolveUID(cmd, app, ownerInput, mode)
+	if err != nil {
+		return api.UserListReference{}, err
+	}
+	canonical := strconv.FormatInt(ownerID, 10)
+	if sid != "" {
+		canonical += "/" + sid
+	}
+	reference, err := app.API.ResolveUserListReference(ctx, canonical)
+	if err != nil {
+		return api.UserListReference{}, app.invalidInput(cmd, err.Error(), mode)
+	}
+	return reference, nil
+}
+
+func isUserListsURLInput(value string) bool {
+	value = strings.ToLower(strings.TrimSpace(value))
+	return strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://") || strings.HasPrefix(value, "b23.tv/")
+}
+
+func splitUserListsInput(value string) (string, string, error) {
+	parts := strings.Split(strings.TrimSpace(value), "/")
+	if len(parts) == 1 && strings.TrimSpace(parts[0]) != "" {
+		return parts[0], "", nil
+	}
+	if len(parts) == 2 && strings.TrimSpace(parts[0]) != "" && strings.TrimSpace(parts[1]) != "" {
+		return parts[0], parts[1], nil
+	}
+	return "", "", api.NewError(api.CodeInvalidInput, "", "用户列表引用必须是 UID_OR_NAME 或 UID_OR_NAME/SID")
 }
 
 func userListDirectoryPayload(directory api.UserListDirectory) map[string]any {
