@@ -23,6 +23,7 @@ const defaultBaseURL = "https://api.bilibili.com"
 const defaultVCBaseURL = "https://api.vc.bilibili.com"
 const defaultPassportBaseURL = "https://passport.bilibili.com"
 const defaultAppBaseURL = "https://app.bilibili.com"
+const defaultLiveBaseURL = "https://api.live.bilibili.com"
 const defaultGeetestBaseURL = "https://api.geetest.com"
 
 const appKey = "dfca71928277209b"
@@ -36,6 +37,7 @@ type Client struct {
 	VCBaseURL       string
 	PassportBaseURL string
 	AppBaseURL      string
+	LiveBaseURL     string
 	GeetestBaseURL  string
 	HTTP            *http.Client
 	UserAgent       string
@@ -81,6 +83,7 @@ func NewClient() *Client {
 		VCBaseURL:       vcBase,
 		PassportBaseURL: passportBase,
 		AppBaseURL:      appBase,
+		LiveBaseURL:     defaultLiveBaseURL,
 		GeetestBaseURL:  defaultGeetestBaseURL,
 		HTTP:            &http.Client{Timeout: timeout},
 		UserAgent:       userAgent,
@@ -112,6 +115,10 @@ func (c *Client) PassportURL(path string) string {
 
 func (c *Client) AppURL(path string) string {
 	return joinURL(c.AppBaseURL, defaultAppBaseURL, path)
+}
+
+func (c *Client) LiveURL(path string) string {
+	return joinURL(c.LiveBaseURL, defaultLiveBaseURL, path)
 }
 
 func joinURL(base, fallback, path string) string {
@@ -148,6 +155,7 @@ type envelope struct {
 	Code    *int            `json:"code"`
 	Message string          `json:"message"`
 	Data    json.RawMessage `json:"data"`
+	Result  json.RawMessage `json:"result"`
 }
 
 func (c *Client) request(ctx context.Context, method, path string, query url.Values, form url.Values, cred *Credential, out any) error {
@@ -265,16 +273,24 @@ func (c *Client) requestWithBodyOnce(ctx context.Context, method, requestURL str
 	}
 	if env.Code != nil && *env.Code != 0 {
 		apiErr := mapAPIError(*env.Code, env.Message)
-		apiErr.Data = append(json.RawMessage(nil), env.Data...)
+		apiErr.Data = append(json.RawMessage(nil), envelopePayload(env)...)
 		return apiErr
 	}
-	if out == nil || len(env.Data) == 0 || string(env.Data) == "null" {
+	responseData := envelopePayload(env)
+	if out == nil || len(responseData) == 0 || string(responseData) == "null" {
 		return nil
 	}
-	if err := decodeJSON(env.Data, out); err != nil {
+	if err := decodeJSON(responseData, out); err != nil {
 		return &Error{Code: CodeUpstream, Message: "响应数据格式异常", Err: err}
 	}
 	return nil
+}
+
+func envelopePayload(env envelope) json.RawMessage {
+	if len(env.Data) > 0 && string(env.Data) != "null" {
+		return env.Data
+	}
+	return env.Result
 }
 
 func (c *Client) signAppValues(values url.Values, cred *Credential) url.Values {
