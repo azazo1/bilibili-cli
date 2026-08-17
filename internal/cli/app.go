@@ -147,6 +147,18 @@ func (a *App) RequireCredential(ctx context.Context, write bool, mode output.Mod
 	return nil, a.Fail(api.NewError(api.CodeNotAuthenticated, "", message), "", mode)
 }
 
+func (a *App) OptionalCredential(ctx context.Context) *api.Credential {
+	credential, err := a.Auth.GetCredential(ctx, auth.ModeOptional)
+	if err != nil {
+		a.Logger.Warn("读取登录凭证失败, 将以未登录状态继续", "error", err)
+		return nil
+	}
+	if credential == nil {
+		a.Logger.Warn("未登录, 某些信息可能缺失. 使用 bili me login 登录以获取完整信息")
+	}
+	return credential
+}
+
 func (a *App) RequireWritable(mode output.Mode, action string) error {
 	if !a.Config.Safety.ReadOnly {
 		return nil
@@ -164,7 +176,11 @@ func (a *App) setupLogging(verbose bool) {
 		level = slog.LevelDebug
 	}
 	options := &slog.HandlerOptions{Level: level}
-	a.Logger = slog.New(slog.NewTextHandler(os.Stderr, options))
+	stderr := io.Writer(os.Stderr)
+	if a.Out != nil && a.Out.Stderr != nil {
+		stderr = a.Out.Stderr
+	}
+	a.Logger = slog.New(slog.NewTextHandler(stderr, options))
 	slog.SetDefault(a.Logger)
 	a.Auth.Logger = a.Logger
 	a.API.Logger = a.Logger

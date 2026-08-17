@@ -6,8 +6,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/azazo1/bilibili-cli/internal/api"
-	"github.com/azazo1/bilibili-cli/internal/auth"
 	"github.com/azazo1/bilibili-cli/internal/model"
 )
 
@@ -28,11 +26,8 @@ func newVideoCommand(app *App) *cobra.Command {
 				return err
 			}
 			ctx := contextOrBackground(cmd.Context())
-			var credential *api.Credential
-			if comments || showAI || related {
-				credential, _ = app.Auth.GetCredential(ctx, auth.ModeOptional)
-			}
-			info, err := app.API.GetVideoInfo(ctx, bvid, nil)
+			credential := app.OptionalCredential(ctx)
+			info, err := app.API.GetVideoInfo(ctx, bvid, credential)
 			if err != nil {
 				return app.apiFailure(err, "获取视频信息失败", mode)
 			}

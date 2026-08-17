@@ -9,7 +9,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/azazo1/bilibili-cli/internal/auth"
 	"github.com/azazo1/bilibili-cli/internal/media"
 	"github.com/azazo1/bilibili-cli/internal/output"
 )
@@ -34,7 +33,7 @@ func newAudioCommand(app *App) *cobra.Command {
 				return err
 			}
 			ctx := contextOrBackground(cmd.Context())
-			credential, _ := app.Auth.GetCredential(ctx, auth.ModeOptional)
+			credential := app.OptionalCredential(ctx)
 			info, fetchErr := app.API.GetVideoInfo(ctx, bvid, credential)
 			if fetchErr != nil {
 				return app.apiFailure(fetchErr, "获取视频信息", mode)

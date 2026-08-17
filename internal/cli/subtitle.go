@@ -10,7 +10,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/azazo1/bilibili-cli/internal/api"
-	"github.com/azazo1/bilibili-cli/internal/auth"
 )
 
 type subtitleCommandItem struct {
@@ -44,7 +43,7 @@ func newSubtitleCommand(app *App) *cobra.Command {
 				return err
 			}
 			ctx := contextOrBackground(cmd.Context())
-			credential, _ := app.Auth.GetCredential(ctx, auth.ModeOptional)
+			credential := app.OptionalCredential(ctx)
 			tracks, err := app.API.GetVideoSubtitleTracks(ctx, bvid, credential)
 			if err != nil {
 				return app.apiFailure(err, "获取字幕列表", mode)

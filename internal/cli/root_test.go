@@ -205,6 +205,35 @@ func TestHotCommandUsesNormalizedEnvelope(t *testing.T) {
 	}
 }
 
+func TestAnonymousVideoWarningUsesStderr(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/x/web-interface/view" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		fmt.Fprint(w, `{"code":0,"data":{"bvid":"BV1ABcsztEcY","title":"demo","duration":60,"owner":{"mid":1,"name":"up"},"stat":{"view":9}}}`)
+	}))
+	defer server.Close()
+
+	app := newTestApp(t)
+	app.API.BaseURL = server.URL
+	app.API.HTTP = server.Client()
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	app.Out = &output.Writer{Stdout: stdout, Stderr: stderr}
+	root := NewRoot(app)
+	root.SetArgs([]string{"video", "BV1ABcsztEcY", "--json"})
+	if err := root.ExecuteContext(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope["ok"] != true || !strings.Contains(stderr.String(), "level=WARN") || strings.Contains(stdout.String(), "level=WARN") {
+		t.Fatalf("unexpected output streams: stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
 func TestReadOnlyBlocksAccountWriteCommands(t *testing.T) {
 	app := newTestApp(t)
 	app.Config.Safety.ReadOnly = true

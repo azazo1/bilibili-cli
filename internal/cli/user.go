@@ -9,7 +9,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/azazo1/bilibili-cli/internal/api"
-	"github.com/azazo1/bilibili-cli/internal/auth"
 	"github.com/azazo1/bilibili-cli/internal/model"
 	"github.com/azazo1/bilibili-cli/internal/output"
 )
@@ -49,7 +48,7 @@ func newUserCommand(app *App) *cobra.Command {
 				return err
 			}
 			ctx := contextOrBackground(cmd.Context())
-			credential, _ := app.Auth.GetCredential(ctx, auth.ModeOptional)
+			credential := app.OptionalCredential(ctx)
 			info, err := app.API.GetUserInfo(ctx, uid, credential)
 			if err != nil {
 				return app.apiFailure(err, "获取用户信息失败", mode)
@@ -93,7 +92,7 @@ func newUserVideosCommand(app *App) *cobra.Command {
 				return err
 			}
 			ctx := contextOrBackground(cmd.Context())
-			credential, _ := app.Auth.GetCredential(ctx, auth.ModeOptional)
+			credential := app.OptionalCredential(ctx)
 			videos, err := app.API.GetUserVideos(ctx, uid, count, credential)
 			if err != nil {
 				return app.apiFailure(err, "获取视频列表失败", mode)
