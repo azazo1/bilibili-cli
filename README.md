@@ -35,6 +35,8 @@ go run ./cmd/bili me login
 go run ./cmd/bili me --yaml
 ```
 
+扫码登录会同时保存 Web Cookie, App access token 和 refresh token. 升级到此版本后, 请重新执行一次 `bili me login` 以启用 App 请求路径.
+
 ## 字幕
 
 ```shell

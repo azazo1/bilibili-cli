@@ -2,11 +2,10 @@ package auth
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/cookiejar"
 	"net/url"
 	"strings"
 	"time"
@@ -15,55 +14,25 @@ import (
 	"github.com/azazo1/bilibili-cli/internal/api"
 )
 
-type qrGenerateResponse struct {
-	URL       string `json:"url"`
-	QRCodeKey string `json:"qrcode_key"`
+type tvQRGenerateResponse struct {
+	URL      string `json:"url"`
+	AuthCode string `json:"auth_code"`
 }
-
-type qrPollEnvelope struct {
-	Code    int            `json:"code"`
-	Message string         `json:"message"`
-	Data    map[string]any `json:"data"`
-}
-
-const qrWebSource = "main-fe-header"
 
 func (s *Store) QRLogin(ctx context.Context, out io.Writer) (*api.Credential, error) {
-	session, err := s.newQRLoginSession()
-	if err != nil {
-		return nil, api.NewError(api.CodeInternal, "登录", err.Error())
-	}
-	return session.qrLogin(ctx, out)
-}
-
-func (s *Store) newQRLoginSession() (*Store, error) {
 	if s.Client == nil {
-		return nil, fmt.Errorf("登录客户端未初始化")
+		return nil, api.NewError(api.CodeInternal, "登录", "登录客户端未初始化")
 	}
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		return nil, err
+	var generated tvQRGenerateResponse
+	query := url.Values{
+		"local_id": []string{"0"},
+		"mobi_app": []string{"android_hd"},
+		"platform": []string{"android"},
 	}
-	baseClient := s.Client.HTTP
-	if baseClient == nil {
-		baseClient = http.DefaultClient
-	}
-	httpClient := *baseClient
-	httpClient.Jar = jar
-	apiClient := *s.Client
-	apiClient.HTTP = &httpClient
-	session := *s
-	session.Client = &apiClient
-	return &session, nil
-}
-
-func (s *Store) qrLogin(ctx context.Context, out io.Writer) (*api.Credential, error) {
-	var generated qrGenerateResponse
-	query := url.Values{"source": []string{qrWebSource}}
-	if err := s.Client.RequestPassport(ctx, http.MethodGet, "/x/passport-login/web/qrcode/generate", query, nil, nil, &generated); err != nil {
+	if err := s.Client.RequestPassportApp(ctx, http.MethodPost, "/x/passport-tv-login/qrcode/auth_code", query, nil, nil, &generated); err != nil {
 		return nil, api.NewError(api.CodeNetwork, "登录", err.Error())
 	}
-	if generated.URL == "" || generated.QRCodeKey == "" {
+	if generated.URL == "" || generated.AuthCode == "" {
 		return nil, api.NewError(api.CodeUpstream, "登录", "二维码响应缺少地址")
 	}
 	if out != nil {
@@ -80,7 +49,7 @@ func (s *Store) qrLogin(ctx context.Context, out io.Writer) (*api.Credential, er
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	for {
-		credential, state, err := s.pollQRCode(ctx, generated.QRCodeKey)
+		credential, state, err := s.pollTVQRCode(ctx, generated.AuthCode)
 		if err != nil {
 			return nil, err
 		}
@@ -108,118 +77,32 @@ func (s *Store) qrLogin(ctx context.Context, out io.Writer) (*api.Credential, er
 	}
 }
 
-func (s *Store) pollQRCode(ctx context.Context, key string) (*api.Credential, string, error) {
+func (s *Store) pollTVQRCode(ctx context.Context, authCode string) (*api.Credential, string, error) {
 	query := url.Values{
-		"qrcode_key": []string{key},
-		"source":     []string{qrWebSource},
+		"auth_code": []string{authCode},
+		"local_id":  []string{"0"},
 	}
-	requestURL := s.Client.PassportURL("/x/passport-login/web/qrcode/poll") + "?" + query.Encode()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+	var data map[string]any
+	err := s.Client.RequestPassportApp(ctx, http.MethodPost, "/x/passport-tv-login/qrcode/poll", query, nil, nil, &data)
 	if err != nil {
-		return nil, "", err
-	}
-	req.Header.Set("User-Agent", s.Client.UserAgent)
-	req.Header.Set("Accept", "application/json, text/plain, */*")
-	req.Header.Set("Referer", "https://www.bilibili.com/")
-	client := s.Client.HTTP
-	if client == nil {
-		client = http.DefaultClient
-	}
-	resp, err := client.Do(req)
-	if err != nil {
+		var apiErr *api.Error
+		if errors.As(err, &apiErr) {
+			switch apiErr.APIStatus {
+			case 86039:
+				return nil, "waiting", nil
+			case 86038:
+				return nil, "timeout", nil
+			case 86090:
+				return nil, "confirmed", nil
+			}
+		}
 		return nil, "", api.NewError(api.CodeNetwork, "登录", err.Error())
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, "", api.NewError(api.CodeNetwork, "登录", fmt.Sprintf("HTTP %d", resp.StatusCode))
+	credential := credentialFromTVLoginData(data)
+	if credential == nil {
+		return nil, "", api.NewError(api.CodeUpstream, "登录", "登录响应缺少 App 凭证")
 	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, "", api.NewError(api.CodeNetwork, "登录", err.Error())
-	}
-	var envelope qrPollEnvelope
-	if err := json.Unmarshal(body, &envelope); err != nil {
-		return nil, "", api.NewError(api.CodeUpstream, "登录", err.Error())
-	}
-	pollCode := qrPollCode(envelope.Data, envelope.Code)
-	switch pollCode {
-	case 0:
-		loginURL := apiString(envelope.Data["url"])
-		credential := credentialFromPollData(envelope.Data, resp.Cookies())
-		if credential == nil && loginURL != "" {
-			credential, _ = s.credentialFromLoginRedirect(ctx, loginURL)
-		}
-		if credential == nil {
-			return nil, "", api.NewError(api.CodeUpstream, "登录", "登录响应缺少凭证")
-		}
-		if refreshToken := apiString(envelope.Data["refresh_token"]); refreshToken != "" {
-			credential.AcTimeValue = refreshToken
-		}
-		return credential, "done", nil
-	case 86038:
-		return nil, "timeout", nil
-	case 86090:
-		return nil, "confirmed", nil
-	case 86101:
-		return nil, "waiting", nil
-	default:
-		message := apiString(envelope.Data["message"])
-		if message == "" {
-			message = envelope.Message
-		}
-		return nil, "", api.NewError(api.CodeUpstream, "登录", fmt.Sprintf("[%d] %s", pollCode, message))
-	}
-}
-
-func qrPollCode(data map[string]any, fallback int) int {
-	value, ok := data["code"]
-	if !ok {
-		return fallback
-	}
-	switch typed := value.(type) {
-	case float64:
-		return int(typed)
-	case float32:
-		return int(typed)
-	case int:
-		return typed
-	case int64:
-		return int(typed)
-	case json.Number:
-		if parsed, err := typed.Int64(); err == nil {
-			return int(parsed)
-		}
-	}
-	return fallback
-}
-
-func credentialFromLoginURL(raw string) *api.Credential {
-	if raw == "" {
-		return nil
-	}
-	parsed, err := url.Parse(raw)
-	if err != nil {
-		return nil
-	}
-	values := rawQueryValues(parsed.RawQuery)
-	return credentialFromCookies(map[string]string{
-		"SESSDATA":    values["SESSDATA"],
-		"bili_jct":    values["bili_jct"],
-		"ac_time_value": values["ac_time_value"],
-		"buvid3":      values["buvid3"],
-		"buvid4":      values["buvid4"],
-		"DedeUserID":  values["DedeUserID"],
-	})
-}
-
-func credentialFromPollData(data map[string]any, responseCookies []*http.Cookie) *api.Credential {
-	if credential := credentialFromLoginURL(apiString(data["url"])); credential != nil {
-		return credential
-	}
-	if credential := credentialFromCookieInfo(data["cookie_info"]); credential != nil {
-		return credential
-	}
-	return credentialFromResponseCookies(responseCookies)
+	return credential, "done", nil
 }
 
 func credentialFromCookieInfo(value any) *api.Credential {
@@ -245,73 +128,22 @@ func credentialFromCookieInfo(value any) *api.Credential {
 	return credentialFromCookies(values)
 }
 
-func credentialFromResponseCookies(cookies []*http.Cookie) *api.Credential {
-	values := make(map[string]string, len(cookies))
-	for _, cookie := range cookies {
-		if cookie != nil && cookie.Name != "" {
-			values[cookie.Name] = cookie.Value
-		}
+func credentialFromTVLoginData(data map[string]any) *api.Credential {
+	credential := credentialFromCookieInfo(data["cookie_info"])
+	if credential == nil {
+		return nil
 	}
-	return credentialFromCookies(values)
-}
-
-func (s *Store) credentialFromLoginRedirect(ctx context.Context, rawURL string) (*api.Credential, error) {
-	if strings.HasPrefix(rawURL, "//") {
-		rawURL = "https:" + rawURL
+	token, _ := data["token_info"].(map[string]any)
+	credential.AccessKey = apiString(token["access_token"])
+	credential.RefreshToken = apiString(token["refresh_token"])
+	if credential.RefreshToken == "" {
+		credential.RefreshToken = apiString(data["refresh_token"])
 	}
-	loginURL, err := url.Parse(rawURL)
-	if err != nil {
-		return nil, err
+	credential.AcTimeValue = credential.RefreshToken
+	if !credential.ValidForApp() {
+		return nil
 	}
-	host := strings.ToLower(loginURL.Hostname())
-	if loginURL.Scheme == "" || (host != "bilibili.com" && !strings.HasSuffix(host, ".bilibili.com")) {
-		return nil, nil
-	}
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		return nil, err
-	}
-	baseClient := s.Client.HTTP
-	if baseClient == nil {
-		baseClient = http.DefaultClient
-	}
-	redirectClient := *baseClient
-	redirectClient.Jar = jar
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, loginURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", s.Client.UserAgent)
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-	req.Header.Set("Referer", "https://www.bilibili.com/")
-	resp, err := redirectClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
-	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
-		return nil, err
-	}
-	cookies := append([]*http.Cookie{}, resp.Cookies()...)
-	cookies = append(cookies, jar.Cookies(loginURL)...)
-	homeURL := &url.URL{Scheme: "https", Host: "www.bilibili.com"}
-	cookies = append(cookies, jar.Cookies(homeURL)...)
-	return credentialFromResponseCookies(cookies), nil
-}
-
-func rawQueryValues(raw string) map[string]string {
-	values := make(map[string]string)
-	for _, part := range strings.Split(raw, "&") {
-		pair := strings.SplitN(part, "=", 2)
-		if len(pair) != 2 {
-			continue
-		}
-		values[pair[0]] = pair[1]
-	}
-	return values
+	return credential
 }
 
 func renderQR(content string) (string, error) {

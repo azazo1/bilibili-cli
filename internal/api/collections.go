@@ -31,9 +31,13 @@ func (c *Client) GetFavoriteList(ctx context.Context, cred *Credential) ([]map[s
 	if uid == 0 {
 		return nil, NewError(CodeUpstream, "获取收藏夹列表", "当前用户信息缺少 mid")
 	}
-	query := url.Values{"up_mid": []string{fmt.Sprintf("%d", uid)}}
+	query := url.Values{
+		"up_mid": []string{fmt.Sprintf("%d", uid)},
+		"pn":     []string{"1"},
+		"ps":     []string{"20"},
+	}
 	var data map[string]any
-	if err := c.request(ctx, http.MethodGet, "/x/v3/fav/folder/created/list-all", query, nil, cred, &data); err != nil {
+	if err := c.request(ctx, http.MethodGet, "/x/v3/fav/folder/created/list", query, nil, cred, &data); err != nil {
 		return nil, withAction("获取收藏夹列表", err)
 	}
 	return mapList(mapValue(data)["list"]), nil
@@ -63,23 +67,25 @@ func (c *Client) GetWatchLater(ctx context.Context, cred *Credential) (map[strin
 	if err := requireCredential("获取稍后再看列表", cred, false); err != nil {
 		return nil, err
 	}
-	var object map[string]any
-	if err := c.request(ctx, http.MethodGet, "/x/v2/history/toview", nil, nil, cred, &object); err == nil {
-		if list := object["list"]; list != nil {
-			return map[string]any{"list": list, "count": object["count"]}, nil
-		}
+	query := url.Values{
+		"pn":           []string{"1"},
+		"ps":           []string{"20"},
+		"viewed":       []string{"0"},
+		"key":          []string{""},
+		"asc":          []string{"false"},
+		"need_split":   []string{"true"},
+		"web_location": []string{"333.881"},
 	}
-	var data []map[string]any
-	if err := c.request(ctx, http.MethodGet, "/x/v2/history/toview", nil, nil, cred, &data); err != nil {
+	requestCredential := c.credentialWithDevice(ctx, cred)
+	signed, err := c.signWBI(ctx, query, requestCredential)
+	if err != nil {
 		return nil, withAction("获取稍后再看列表", err)
 	}
-	for _, item := range data {
-		if stringValue(item["name"]) == "稍后再看" || intValue(item["id"], 0) == 2 {
-			response := mapValue(item["mediaListResponse"])
-			return map[string]any{"list": response["list"], "count": response["count"]}, nil
-		}
+	var data map[string]any
+	if err := c.request(ctx, http.MethodGet, "/x/v2/history/toview/web", signed, nil, requestCredential, &data); err != nil {
+		return nil, withAction("获取稍后再看列表", err)
 	}
-	return map[string]any{"list": []any{}, "count": 0}, nil
+	return mapValue(data), nil
 }
 
 func (c *Client) GetDynamicFeed(ctx context.Context, offset string, cred *Credential) (map[string]any, error) {

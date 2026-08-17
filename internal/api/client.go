@@ -3,7 +3,9 @@ package api
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
 	"encoding/json"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -20,13 +22,19 @@ import (
 const defaultBaseURL = "https://api.bilibili.com"
 const defaultVCBaseURL = "https://api.vc.bilibili.com"
 const defaultPassportBaseURL = "https://passport.bilibili.com"
+const defaultAppBaseURL = "https://app.bilibili.com"
 
-const userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
+const appKey = "dfca71928277209b"
+const appSecret = "b5475a8825547a4fc26c7d518eaaa02e"
+const appUserAgent = "Mozilla/5.0 BiliDroid/8.43.0 (bbcallen@gmail.com) os/android model/android mobi_app/android build/8430300 channel/master innerVer/8430300 osVer/15 network/2"
+
+const userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.2 Safari/605.1.15"
 
 type Client struct {
 	BaseURL         string
 	VCBaseURL       string
 	PassportBaseURL string
+	AppBaseURL      string
 	HTTP            *http.Client
 	UserAgent       string
 	Logger          *slog.Logger
@@ -53,6 +61,10 @@ func NewClient() *Client {
 	if passportBase == "" {
 		passportBase = defaultPassportBaseURL
 	}
+	appBase := strings.TrimRight(strings.TrimSpace(os.Getenv("BILI_APP_BASE_URL")), "/")
+	if appBase == "" {
+		appBase = defaultAppBaseURL
+	}
 	timeout := 30 * time.Second
 	if raw := strings.TrimSpace(os.Getenv("BILI_HTTP_TIMEOUT")); raw != "" {
 		if seconds, err := strconv.Atoi(raw); err == nil && seconds > 0 {
@@ -63,6 +75,7 @@ func NewClient() *Client {
 		BaseURL:         base,
 		VCBaseURL:       vcBase,
 		PassportBaseURL: passportBase,
+		AppBaseURL:      appBase,
 		HTTP:            &http.Client{Timeout: timeout},
 		UserAgent:       userAgent,
 		Logger:          slog.Default(),
@@ -91,6 +104,10 @@ func (c *Client) PassportURL(path string) string {
 	return joinURL(c.PassportBaseURL, defaultPassportBaseURL, path)
 }
 
+func (c *Client) AppURL(path string) string {
+	return joinURL(c.AppBaseURL, defaultAppBaseURL, path)
+}
+
 func joinURL(base, fallback, path string) string {
 	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
 		return path
@@ -109,6 +126,14 @@ func (c *Client) RequestPassport(ctx context.Context, method, path string, query
 	return c.requestAtBase(ctx, method, c.PassportBaseURL, defaultPassportBaseURL, path, query, form, cred, out)
 }
 
+func (c *Client) RequestApp(ctx context.Context, method, path string, query url.Values, form url.Values, cred *Credential, out any) error {
+	return c.requestAppAtBase(ctx, method, c.AppBaseURL, defaultAppBaseURL, path, query, form, cred, out)
+}
+
+func (c *Client) RequestPassportApp(ctx context.Context, method, path string, query url.Values, form url.Values, cred *Credential, out any) error {
+	return c.requestAppAtBase(ctx, method, c.PassportBaseURL, defaultPassportBaseURL, path, query, form, cred, out)
+}
+
 func (c *Client) RequestJSON(ctx context.Context, method, path string, query url.Values, payload any, cred *Credential, out any) error {
 	return c.requestJSON(ctx, method, path, query, payload, cred, out)
 }
@@ -124,13 +149,29 @@ func (c *Client) request(ctx context.Context, method, path string, query url.Val
 }
 
 func (c *Client) requestAtBase(ctx context.Context, method, base, fallback, path string, query url.Values, form url.Values, cred *Credential, out any) error {
+	return c.requestAtBaseWithHeaders(ctx, method, base, fallback, path, query, form, cred, nil, out)
+}
+
+func (c *Client) requestAtBaseWithHeaders(ctx context.Context, method, base, fallback, path string, query url.Values, form url.Values, cred *Credential, headers http.Header, out any) error {
 	var body io.Reader
 	contentType := ""
 	if form != nil {
 		body = strings.NewReader(form.Encode())
 		contentType = "application/x-www-form-urlencoded"
 	}
-	return c.requestWithBody(ctx, method, joinURL(base, fallback, path), query, body, contentType, cred, out)
+	return c.requestWithBody(ctx, method, joinURL(base, fallback, path), query, body, contentType, cred, headers, out)
+}
+
+func (c *Client) requestWithHeaders(ctx context.Context, method, path string, query url.Values, form url.Values, cred *Credential, headers http.Header, out any) error {
+	return c.requestAtBaseWithHeaders(ctx, method, c.BaseURL, defaultBaseURL, path, query, form, cred, headers, out)
+}
+
+func (c *Client) requestAppAtBase(ctx context.Context, method, base, fallback, path string, query url.Values, form url.Values, cred *Credential, out any) error {
+	headers := appRequestHeaders(cred)
+	if form != nil {
+		return c.requestAtBaseWithHeaders(ctx, method, base, fallback, path, query, c.signAppValues(form, cred), nil, headers, out)
+	}
+	return c.requestAtBaseWithHeaders(ctx, method, base, fallback, path, c.signAppValues(query, cred), nil, nil, headers, out)
 }
 
 func (c *Client) requestJSON(ctx context.Context, method, path string, query url.Values, payload any, cred *Credential, out any) error {
@@ -138,10 +179,35 @@ func (c *Client) requestJSON(ctx context.Context, method, path string, query url
 	if err != nil {
 		return &Error{Code: CodeInvalidInput, Message: "JSON 请求体编码失败", Err: err}
 	}
-	return c.requestWithBody(ctx, method, c.URL(path), query, bytes.NewReader(encoded), "application/json", cred, out)
+	return c.requestWithBody(ctx, method, c.URL(path), query, bytes.NewReader(encoded), "application/json", cred, nil, out)
 }
 
-func (c *Client) requestWithBody(ctx context.Context, method, requestURL string, query url.Values, body io.Reader, contentType string, cred *Credential, out any) error {
+func (c *Client) requestWithBody(ctx context.Context, method, requestURL string, query url.Values, body io.Reader, contentType string, cred *Credential, headers http.Header, out any) error {
+	attempts := 1
+	if method == http.MethodGet && body == nil {
+		attempts = 3
+	}
+	var lastErr error
+	for attempt := 1; attempt <= attempts; attempt++ {
+		err := c.requestWithBodyOnce(ctx, method, requestURL, query, body, contentType, cred, headers, out)
+		if err == nil || attempt == attempts || !isRetryableReadError(err) {
+			return err
+		}
+		lastErr = err
+		if c.Logger != nil {
+			c.Logger.Warn("读取请求失败, 准备重试", "method", method, "url", requestURL, "attempt", attempt, "error", err)
+		}
+		wait := time.Duration(attempt) * 500 * time.Millisecond
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(wait):
+		}
+	}
+	return lastErr
+}
+
+func (c *Client) requestWithBodyOnce(ctx context.Context, method, requestURL string, query url.Values, body io.Reader, contentType string, cred *Credential, headers http.Header, out any) error {
 	if len(query) > 0 {
 		requestURL += "?" + query.Encode()
 	}
@@ -153,6 +219,12 @@ func (c *Client) requestWithBody(ctx context.Context, method, requestURL string,
 	req.Header.Set("Accept", "application/json, text/plain, */*")
 	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9")
 	req.Header.Set("Referer", "https://www.bilibili.com/")
+	for name, values := range headers {
+		req.Header.Del(name)
+		for _, value := range values {
+			req.Header.Add(name, value)
+		}
+	}
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
@@ -195,6 +267,41 @@ func (c *Client) requestWithBody(ctx context.Context, method, requestURL string,
 		return &Error{Code: CodeUpstream, Message: "响应数据格式异常", Err: err}
 	}
 	return nil
+}
+
+func (c *Client) signAppValues(values url.Values, cred *Credential) url.Values {
+	signed := make(url.Values, len(values)+3)
+	for name, items := range values {
+		signed[name] = append([]string(nil), items...)
+	}
+	if cred != nil && cred.AccessKey != "" {
+		signed.Set("access_key", cred.AccessKey)
+	}
+	signed.Set("appkey", appKey)
+	signed.Set("ts", strconv.FormatInt(time.Now().Unix(), 10))
+	sum := md5.Sum([]byte(signed.Encode() + appSecret))
+	signed.Set("sign", hex.EncodeToString(sum[:]))
+	return signed
+}
+
+func appRequestHeaders(cred *Credential) http.Header {
+	headers := make(http.Header)
+	headers.Set("User-Agent", appUserAgent)
+	headers.Set("env", "prod")
+	headers.Set("app-key", "android64")
+	headers.Set("x-bili-aurora-zone", "sh001")
+	if cred != nil && cred.DedeUserID != "" {
+		headers.Set("x-bili-mid", cred.DedeUserID)
+	}
+	return headers
+}
+
+func isRetryableReadError(err error) bool {
+	var apiErr *Error
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+	return apiErr.Code == CodeNetwork && (apiErr.HTTPStatus == 0 || apiErr.HTTPStatus >= http.StatusInternalServerError)
 }
 
 func decodeJSON(data []byte, out any) error {
@@ -249,7 +356,7 @@ func mapAPIError(code int, message string) *Error {
 		result.Code = CodeNotAuthenticated
 	case -404, 62002, 62004:
 		result.Code = CodeNotFound
-	case -412, 412:
+	case -412, 412, -799:
 		result.Code = CodeRateLimited
 	default:
 		result.Code = CodeUpstream

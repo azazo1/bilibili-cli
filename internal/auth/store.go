@@ -80,7 +80,7 @@ func (s *Store) LoadSaved() (*api.Credential, error) {
 func (s *Store) Save(credential *api.Credential) error {
 	s.ensureDefaults()
 	if credential == nil || !credential.ValidForRead() {
-		return api.NewError(api.CodeInvalidInput, "保存凭证", "SESSDATA 不能为空")
+		return api.NewError(api.CodeInvalidInput, "保存凭证", "登录凭证不能为空")
 	}
 	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
 		return err

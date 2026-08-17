@@ -159,12 +159,13 @@ func FormatCount(value any) string {
 }
 
 func NormalizeUser(info map[string]any) map[string]any {
+	levelInfo := Map(info["level_info"])
 	return map[string]any{
 		"id":       String(info["mid"]),
 		"name":     firstString(info["name"], info["uname"]),
 		"username": firstString(info["name"], info["uname"]),
-		"level":    ToInt(info["level"], 0),
-		"coins":    ToInt(info["coins"], 0),
+		"level":    ToInt(firstValue(info["level"], levelInfo["current_level"]), 0),
+		"coins":    ToInt(firstValue(info["money"], info["coins"]), 0),
 		"sign":     String(info["sign"]),
 		"vip":      Map(info["vip"]),
 	}

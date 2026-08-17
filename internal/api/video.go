@@ -36,10 +36,20 @@ func (c *Client) getVideoPages(ctx context.Context, bvid string, cred *Credentia
 }
 
 func (c *Client) getPlayerInfo(ctx context.Context, bvid string, cid int64, cred *Credential) (map[string]any, error) {
-	query := url.Values{"bvid": []string{bvid}, "cid": []string{fmt.Sprintf("%d", cid)}}
+	query := url.Values{
+		"bvid": []string{bvid},
+		"cid":  []string{fmt.Sprintf("%d", cid)},
+	}
 	var data map[string]any
-	err := c.request(ctx, http.MethodGet, "/x/player/v2", query, nil, cred, &data)
-	if err != nil {
+	if cred != nil {
+		requestCredential := c.credentialWithDevice(ctx, cred)
+		if signed, signErr := c.signWBI(ctx, query, requestCredential); signErr == nil {
+			if err := c.request(ctx, http.MethodGet, "/x/player/wbi/v2", signed, nil, requestCredential, &data); err == nil {
+				return mapValue(data), nil
+			}
+		}
+	}
+	if err := c.request(ctx, http.MethodGet, "/x/player/v2", query, nil, cred, &data); err != nil {
 		return nil, withAction("获取播放器信息", err)
 	}
 	return mapValue(data), nil
@@ -58,8 +68,13 @@ func (c *Client) GetVideoAIConclusion(ctx context.Context, bvid string, cred *Cr
 		return map[string]any{}, nil
 	}
 	query := url.Values{"bvid": []string{bvid}, "cid": []string{fmt.Sprintf("%d", cid)}}
+	requestCredential := c.credentialWithDevice(ctx, cred)
+	signed, signErr := c.signWBI(ctx, query, requestCredential)
+	if signErr != nil {
+		return nil, withAction("获取 AI 总结", signErr)
+	}
 	var data map[string]any
-	if err := c.request(ctx, http.MethodGet, "/x/web-interface/view/conclusion/get", query, nil, cred, &data); err != nil {
+	if err := c.request(ctx, http.MethodGet, "/x/web-interface/view/conclusion/get", signed, nil, requestCredential, &data); err != nil {
 		return nil, withAction("获取 AI 总结", err)
 	}
 	return mapValue(data), nil

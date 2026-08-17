@@ -16,12 +16,12 @@ func TestStoreSaveLoadAndOptionalMode(t *testing.T) {
 		File: filepath.Join(dir, "auth.json"),
 		Now:  func() time.Time { return time.Unix(1700000000, 0) },
 	}
-	credential := &api.Credential{Sessdata: "session", BiliJct: "csrf", Buvid3: "device"}
+	credential := &api.Credential{Sessdata: "session", BiliJct: "csrf", Buvid3: "device", AccessKey: "access", RefreshToken: "refresh"}
 	if err := store.Save(credential); err != nil {
 		t.Fatal(err)
 	}
 	loaded, err := store.LoadSaved()
-	if err != nil || loaded == nil || loaded.Sessdata != "session" || loaded.BiliJct != "csrf" {
+	if err != nil || loaded == nil || loaded.Sessdata != "session" || loaded.BiliJct != "csrf" || loaded.AccessKey != "access" || loaded.RefreshToken != "refresh" {
 		t.Fatalf("LoadSaved() = %#v, %v", loaded, err)
 	}
 	got, err := store.GetCredential(context.Background(), ModeOptional)

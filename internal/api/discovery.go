@@ -27,10 +27,14 @@ func (c *Client) GetRankVideos(ctx context.Context, day int) (map[string]any, er
 		day = 3
 	}
 	query := url.Values{"rid": []string{"0"}, "type": []string{"all"}, "day": []string{fmt.Sprintf("%d", day)}}
+	requestCredential := c.credentialWithDevice(ctx, nil)
+	signed, err := c.signWBI(ctx, query, requestCredential)
+	if err != nil {
+		return nil, withAction("获取排行榜", err)
+	}
 	var data map[string]any
-	if err := c.request(ctx, http.MethodGet, "/x/web-interface/ranking/v2", query, nil, nil, &data); err != nil {
+	if err := c.request(ctx, http.MethodGet, "/x/web-interface/ranking/v2", signed, nil, requestCredential, &data); err != nil {
 		return nil, withAction("获取排行榜", err)
 	}
 	return mapValue(data), nil
 }
-

@@ -18,11 +18,19 @@ func (c *Client) LikeVideo(ctx context.Context, bvid string, undo bool, cred *Cr
 	}
 	status := "1"
 	if undo {
-		status = "2"
+		status = "0"
 	}
-	form := url.Values{"aid": []string{fmt.Sprintf("%d", aid)}, "bvid": []string{bvid}, "like": []string{status}, "csrf": []string{cred.BiliJct}}
-	if err := c.request(ctx, http.MethodPost, "/x/web-interface/archive/like", nil, form, requestCredential, nil); err != nil {
-		return withAction("点赞视频", err)
+	form := url.Values{"aid": []string{fmt.Sprintf("%d", aid)}, "like": []string{status}}
+	var requestErr error
+	if cred.ValidForApp() {
+		requestErr = c.RequestApp(ctx, http.MethodPost, "/x/v2/view/like", nil, form, cred, nil)
+	} else {
+		form.Set("bvid", bvid)
+		form.Set("csrf", cred.BiliJct)
+		requestErr = c.request(ctx, http.MethodPost, "/x/web-interface/archive/like", nil, form, requestCredential, nil)
+	}
+	if requestErr != nil {
+		return withAction("点赞视频", requestErr)
 	}
 	return nil
 }
@@ -40,14 +48,21 @@ func (c *Client) CoinVideo(ctx context.Context, bvid string, coins int, cred *Cr
 		return err
 	}
 	form := url.Values{
-		"aid":      []string{fmt.Sprintf("%d", aid)},
-		"bvid":     []string{bvid},
-		"multiply": []string{fmt.Sprintf("%d", coins)},
-		"like":     []string{"0"},
-		"csrf":     []string{cred.BiliJct},
+		"aid":        []string{fmt.Sprintf("%d", aid)},
+		"multiply":   []string{fmt.Sprintf("%d", coins)},
+		"select_like": []string{"0"},
 	}
-	if err := c.request(ctx, http.MethodPost, "/x/web-interface/coin/add", nil, form, requestCredential, nil); err != nil {
-		return withAction("投币", err)
+	var requestErr error
+	if cred.ValidForApp() {
+		requestErr = c.RequestApp(ctx, http.MethodPost, "/x/v2/view/coin/add", nil, form, cred, nil)
+	} else {
+		form.Set("bvid", bvid)
+		form.Set("like", "0")
+		form.Set("csrf", cred.BiliJct)
+		requestErr = c.request(ctx, http.MethodPost, "/x/web-interface/coin/add", nil, form, requestCredential, nil)
+	}
+	if requestErr != nil {
+		return withAction("投币", requestErr)
 	}
 	return nil
 }
@@ -61,7 +76,16 @@ func (c *Client) TripleVideo(ctx context.Context, bvid string, cred *Credential)
 	if err != nil {
 		return nil, err
 	}
-	form := url.Values{"aid": []string{fmt.Sprintf("%d", aid)}, "bvid": []string{bvid}, "csrf": []string{cred.BiliJct}}
+	form := url.Values{
+		"aid":        []string{fmt.Sprintf("%d", aid)},
+		"eab_x":      []string{"2"},
+		"ramval":     []string{"0"},
+		"source":     []string{"web_normal"},
+		"ga":         []string{"1"},
+		"csrf":       []string{cred.BiliJct},
+		"spmid":      []string{"333.788.0.0"},
+		"statistics": []string{`{"appId":100,"platform":5}`},
+	}
 	var data map[string]any
 	if err := c.request(ctx, http.MethodPost, "/x/web-interface/archive/like/triple", nil, form, requestCredential, &data); err != nil {
 		return nil, withAction("一键三连", err)
@@ -97,9 +121,12 @@ func (c *Client) modifyUserRelation(ctx context.Context, uid int64, action strin
 		"fid":    []string{fmt.Sprintf("%d", uid)},
 		"act":    []string{action},
 		"re_src": []string{"11"},
+		"gaia_source": []string{"web_main"},
+		"spmid":       []string{"333.1387"},
+		"extend_content": []string{fmt.Sprintf(`{"entity":"user","entity_id":%d,"fp":"%s"}`, uid, spaceBrowserUserAgent)},
 		"csrf":   []string{cred.BiliJct},
 	}
-	if err := c.request(ctx, http.MethodPost, "/x/relation/modify", nil, form, cred, nil); err != nil {
+	if err := c.requestWithHeaders(ctx, http.MethodPost, "/x/relation/modify", url.Values{"statistics": []string{`{"appId":100,"platform":5}`}, "x-bili-device-req-json": []string{`{"platform":"web","device":"pc","spmid":"333.1387"}`}}, form, cred, spaceRequestHeaders(uid), nil); err != nil {
 		return withAction("修改用户关系", err)
 	}
 	return nil

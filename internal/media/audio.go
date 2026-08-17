@@ -17,7 +17,7 @@ import (
 )
 
 var downloadHeaders = map[string]string{
-	"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/133.0.0.0 Safari/537.36",
+	"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.2 Safari/605.1.15",
 	"Referer":    "https://www.bilibili.com/",
 }
 
@@ -238,4 +238,3 @@ func writePCM16WAV(path string, pcm []byte, sampleRate int) error {
 	_, err = file.Write(pcm)
 	return err
 }
-

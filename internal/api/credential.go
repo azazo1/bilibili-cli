@@ -12,15 +12,21 @@ type Credential struct {
 	Buvid3      string  `json:"buvid3"`
 	Buvid4      string  `json:"buvid4"`
 	DedeUserID  string  `json:"dedeuserid"`
+	AccessKey   string  `json:"access_key,omitempty"`
+	RefreshToken string `json:"refresh_token,omitempty"`
 	SavedAt     float64 `json:"saved_at,omitempty"`
 }
 
 func (c *Credential) ValidForRead() bool {
-	return c != nil && strings.TrimSpace(c.Sessdata) != ""
+	return c != nil && (strings.TrimSpace(c.Sessdata) != "" || strings.TrimSpace(c.AccessKey) != "")
 }
 
 func (c *Credential) ValidForWrite() bool {
-	return c != nil && c.ValidForRead() && strings.TrimSpace(c.BiliJct) != ""
+	return c != nil && ((strings.TrimSpace(c.Sessdata) != "" && strings.TrimSpace(c.BiliJct) != "") || strings.TrimSpace(c.AccessKey) != "")
+}
+
+func (c *Credential) ValidForApp() bool {
+	return c != nil && strings.TrimSpace(c.AccessKey) != ""
 }
 
 func (c *Credential) CookieHeader() string {

@@ -14,28 +14,21 @@ import (
 	"github.com/skip2/go-qrcode"
 )
 
-func TestQRLoginUsesPassportHostForGenerateAndPoll(t *testing.T) {
+func TestQRLoginUsesTVAppEndpoints(t *testing.T) {
 	generateRequests := 0
 	pollRequests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/x/passport-login/web/qrcode/generate":
+		case "/x/passport-tv-login/qrcode/auth_code":
 			generateRequests++
-			if r.URL.Query().Get("source") != qrWebSource {
-				t.Fatalf("unexpected QR source: %s", r.URL.Query().Get("source"))
+			if r.Method != http.MethodPost || r.URL.Query().Get("local_id") != "0" || r.URL.Query().Get("mobi_app") != "android_hd" || r.URL.Query().Get("appkey") == "" || r.URL.Query().Get("sign") == "" {
+				t.Fatalf("unexpected TV QR request: %s", r.URL.RawQuery)
 			}
-			http.SetCookie(w, &http.Cookie{Name: "qr_session", Value: "session"})
-			fmt.Fprint(w, `{"code":0,"data":{"url":"https://example.com/qr","qrcode_key":"test-key"}}`)
-		case "/x/passport-login/web/qrcode/poll":
+			fmt.Fprint(w, `{"code":0,"data":{"url":"https://example.com/qr","auth_code":"test-key"}}`)
+		case "/x/passport-tv-login/qrcode/poll":
 			pollRequests++
-			if r.URL.Query().Get("qrcode_key") != "test-key" {
-				t.Fatalf("unexpected qrcode key: %s", r.URL.Query().Get("qrcode_key"))
-			}
-			if r.URL.Query().Get("source") != qrWebSource {
-				t.Fatalf("unexpected QR source: %s", r.URL.Query().Get("source"))
-			}
-			if cookie, err := r.Cookie("qr_session"); err != nil || cookie.Value != "session" {
-				t.Fatalf("QR session cookie was not preserved: %v", err)
+			if r.Method != http.MethodPost || r.URL.Query().Get("auth_code") != "test-key" || r.URL.Query().Get("local_id") != "0" || r.URL.Query().Get("appkey") == "" || r.URL.Query().Get("sign") == "" {
+				t.Fatalf("unexpected TV poll request: %s", r.URL.RawQuery)
 			}
 			fmt.Fprint(w, `{"code":86038,"message":"expired"}`)
 		default:
@@ -57,63 +50,45 @@ func TestQRLoginUsesPassportHostForGenerateAndPoll(t *testing.T) {
 	}
 }
 
-func TestPollQRCodeExtractsWebCredential(t *testing.T) {
+func TestPollTVQRCodeExtractsAppCredential(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/x/passport-login/web/qrcode/poll" {
+		if r.URL.Path != "/x/passport-tv-login/qrcode/poll" {
 			t.Fatalf("unexpected request path: %s", r.URL.Path)
 		}
-		if r.URL.Query().Get("qrcode_key") != "test-key" || r.URL.Query().Get("source") != qrWebSource {
-			t.Fatalf("unexpected QR query: %s", r.URL.RawQuery)
+		if r.URL.Query().Get("auth_code") != "test-key" || r.URL.Query().Get("appkey") == "" || r.URL.Query().Get("sign") == "" {
+			t.Fatalf("unexpected TV poll query: %s", r.URL.RawQuery)
 		}
-		fmt.Fprint(w, `{"code":0,"data":{"code":0,"url":"https://passport.bilibili.com/x/passport-login/web/crossDomain?SESSDATA=session%2Cvalue&bili_jct=csrf&DedeUserID=42","refresh_token":"refresh-token"}}`)
+		fmt.Fprint(w, `{"code":0,"data":{"token_info":{"access_token":"access-token","refresh_token":"refresh-token"},"cookie_info":{"cookies":[{"name":"SESSDATA","value":"session%2Cvalue"},{"name":"bili_jct","value":"csrf"},{"name":"DedeUserID","value":"42"}]}}}`)
 	}))
 	defer server.Close()
 
 	client := api.NewClient()
 	client.PassportBaseURL = server.URL
 	client.HTTP = server.Client()
-	credential, state, err := (&Store{Client: client}).pollQRCode(context.Background(), "test-key")
+	credential, state, err := (&Store{Client: client}).pollTVQRCode(context.Background(), "test-key")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if state != "done" || credential == nil || credential.Sessdata != "session%2Cvalue" || credential.BiliJct != "csrf" || credential.AcTimeValue != "refresh-token" {
+	if state != "done" || credential == nil || credential.Sessdata != "session%2Cvalue" || credential.BiliJct != "csrf" || credential.AccessKey != "access-token" || credential.RefreshToken != "refresh-token" {
 		t.Fatalf("unexpected QR credential: %#v, state=%s", credential, state)
 	}
 }
 
-func TestPollQRCodeExtractsCookieInfoCredential(t *testing.T) {
+func TestPollTVQRCodeReportsWaiting(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"code":0,"data":{"code":0,"refresh_token":"refresh-token","cookie_info":{"cookies":[{"name":"SESSDATA","value":"session%2Cvalue"},{"name":"bili_jct","value":"csrf"},{"name":"DedeUserID","value":"42"}]}}}`)
+		fmt.Fprint(w, `{"code":86039,"message":"waiting"}`)
 	}))
 	defer server.Close()
 
 	client := api.NewClient()
 	client.PassportBaseURL = server.URL
 	client.HTTP = server.Client()
-	credential, state, err := (&Store{Client: client}).pollQRCode(context.Background(), "test-key")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if state != "done" || credential == nil || credential.Sessdata != "session%2Cvalue" || credential.BiliJct != "csrf" || credential.AcTimeValue != "refresh-token" {
-		t.Fatalf("unexpected cookie info credential: %#v, state=%s", credential, state)
-	}
-}
-
-func TestPollQRCodeUsesNestedStatusCode(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"code":0,"data":{"code":86101,"message":"waiting"}}`)
-	}))
-	defer server.Close()
-
-	client := api.NewClient()
-	client.PassportBaseURL = server.URL
-	client.HTTP = server.Client()
-	credential, state, err := (&Store{Client: client}).pollQRCode(context.Background(), "test-key")
+	credential, state, err := (&Store{Client: client}).pollTVQRCode(context.Background(), "test-key")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if credential != nil || state != "waiting" {
-		t.Fatalf("unexpected nested QR state: credential=%#v state=%s", credential, state)
+		t.Fatalf("unexpected TV QR state: credential=%#v state=%s", credential, state)
 	}
 }
 

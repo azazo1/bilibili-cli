@@ -20,6 +20,18 @@ func TestNormalizeVideoSummary(t *testing.T) {
 	}
 }
 
+func TestNormalizeUserReadsNavLevelAndMoneyFields(t *testing.T) {
+	got := NormalizeUser(map[string]any{
+		"mid":  42,
+		"uname": "owner",
+		"money": 12.5,
+		"level_info": map[string]any{"current_level": 6},
+	})
+	if got["level"] != 6 || got["coins"] != 12 {
+		t.Fatalf("unexpected normalized user: %#v", got)
+	}
+}
+
 func TestNormalizeDynamicItemReadsLegacyCard(t *testing.T) {
 	value := map[string]any{
 		"desc": map[string]any{"dynamic_id": 9, "timestamp": 1700000000},
@@ -30,4 +42,3 @@ func TestNormalizeDynamicItemReadsLegacyCard(t *testing.T) {
 		t.Fatalf("unexpected normalized dynamic: %#v", got)
 	}
 }
-
