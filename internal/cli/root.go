@@ -11,7 +11,7 @@ func NewRoot(app *App) *cobra.Command {
 	var verbose bool
 	root := &cobra.Command{
 		Use:           "bili",
-		Short:         "Bilibili CLI tool",
+		Short:         "浏览, 管理和下载 Bilibili 内容的命令行工具",
 		Version:       Version,
 		SilenceUsage:  true,
 		SilenceErrors: true,

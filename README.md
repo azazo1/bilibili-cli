@@ -1,6 +1,6 @@
-# bilibili-cli-go
+# bili-cli
 
-一个 Go 实现的 Bilibili 终端客户端. 项目覆盖上游 Python CLI 的账户, 视频, 搜索, 发现, 收藏, 动态, 互动和媒体下载工作流.
+一个用于浏览, 管理和下载 Bilibili 内容的 Go 命令行工具. 覆盖账户, 视频, 搜索, 发现, 收藏, 动态, 互动和媒体下载工作流.
 
 ## 功能
 
@@ -13,7 +13,9 @@
 - 保存凭证, QR 登录, JSON/YAML 稳定 envelope 输出.
 - 视频音频流和视频流下载, 支持仅下载音频或视频.
 
-`references/bilibili-cli` 保存上游代码作为本地迁移参考, 已被 Git 忽略.
+## 致谢
+
+本项目的早期功能迁移和命令设计参考了上游 Python 项目 [public-clis/bilibili-cli](https://github.com/public-clis/bilibili-cli), App 请求路径参考了 [bggRGjQaUbCoE/PiliPlus](https://github.com/bggRGjQaUbCoE/PiliPlus). 感谢两个项目提供的实现和思路.
 
 ## 构建
 
