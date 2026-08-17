@@ -68,3 +68,19 @@ func TestNormalizeDynamicItemReadsLegacyCard(t *testing.T) {
 		t.Fatalf("unexpected normalized dynamic: %#v", got)
 	}
 }
+
+func TestNormalizeDynamicItemReadsCurrentResponse(t *testing.T) {
+	value := map[string]any{
+		"id_str": "99",
+		"modules": map[string]any{
+			"module_author": map[string]any{"pub_ts": 1700000000},
+			"module_dynamic": map[string]any{
+				"major": map[string]any{"opus": map[string]any{"title": "title", "summary": map[string]any{"text": "body"}}},
+			},
+		},
+	}
+	got := NormalizeDynamicItem(value)
+	if got["id"] != "99" || got["title"] != "title" || got["text"] != "body" || got["published_at"] == "" {
+		t.Fatalf("unexpected normalized dynamic: %#v", got)
+	}
+}

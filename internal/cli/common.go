@@ -96,7 +96,16 @@ func decodeDynamicText(item map[string]any) string {
 	modules := model.Map(item["modules"])
 	dynamic := model.Map(modules["module_dynamic"])
 	desc := model.Map(dynamic["desc"])
+	major := model.Map(dynamic["major"])
+	opus := model.Map(major["opus"])
+	summary := model.Map(opus["summary"])
 	if value := strings.TrimSpace(model.String(desc["text"])); value != "" {
+		parts = append(parts, value)
+	}
+	if value := strings.TrimSpace(model.String(opus["title"])); value != "" {
+		parts = append(parts, value)
+	}
+	if value := strings.TrimSpace(model.String(summary["text"])); value != "" {
 		parts = append(parts, value)
 	}
 	card := model.DecodeJSON(item["card"])
@@ -133,7 +142,26 @@ func dynamicID(item map[string]any) int64 {
 }
 
 func dynamicTimestamp(item map[string]any) int64 {
-	return model.ToInt64(model.Map(item["desc"])["timestamp"], 0)
+	legacy := model.Map(item["desc"])
+	if timestamp := model.ToInt64(legacy["timestamp"], 0); timestamp > 0 {
+		return timestamp
+	}
+	modules := model.Map(item["modules"])
+	author := model.Map(modules["module_author"])
+	return model.ToInt64(author["pub_ts"], 0)
+}
+
+func withoutPinnedDynamics(items []map[string]any) []map[string]any {
+	result := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		modules := model.Map(item["modules"])
+		author := model.Map(modules["module_author"])
+		if boolValue(author["is_top"]) {
+			continue
+		}
+		result = append(result, item)
+	}
+	return result
 }
 
 func timestampDisplay(value int64) string {

@@ -357,23 +357,26 @@ func newMyDynamicsCommand(app *App) *cobra.Command {
 			if uid == 0 {
 				return app.Fail(api.NewError(api.CodeUpstream, "", "当前用户信息缺少 mid"), "获取我的动态失败", mode)
 			}
-			data, fetchErr := app.API.GetUserDynamics(ctx, uid, offset, needTop, credential)
+			data, fetchErr := app.API.GetUserDynamics(ctx, uid, offset, credential)
 			if fetchErr != nil {
 				return app.apiFailure(fetchErr, "获取我的动态失败", mode)
 			}
-			cards := firstMapList(data["cards"])
-			if len(cards) > count {
-				cards = cards[:count]
+			items := firstMapList(data["items"])
+			if !needTop {
+				items = withoutPinnedDynamics(items)
 			}
-			normalized := make([]map[string]any, 0, len(cards))
-			for _, card := range cards {
-				normalized = append(normalized, model.NormalizeDynamicItem(card))
+			if len(items) > count {
+				items = items[:count]
+			}
+			normalized := make([]map[string]any, 0, len(items))
+			for _, item := range items {
+				normalized = append(normalized, model.NormalizeDynamicItem(item))
 			}
 			payload := map[string]any{"offset": offset, "next_offset": firstString(data["next_offset"], data["offset"]), "items": normalized}
 			return app.CompleteTable(payload, mode, asJSON, asYAML, func(w io.Writer) {
-				rows := make([][]string, 0, len(cards))
-				for _, card := range cards {
-					rows = append(rows, []string{fmt.Sprintf("%d", dynamicID(card)), timestampDisplay(dynamicTimestamp(card)), decodeDynamicText(card)})
+				rows := make([][]string, 0, len(items))
+				for _, item := range items {
+					rows = append(rows, []string{fmt.Sprintf("%d", dynamicID(item)), timestampDisplay(dynamicTimestamp(item)), decodeDynamicText(item)})
 				}
 				app.renderTable(w, fmt.Sprintf("我的动态 (offset=%d)", offset), []string{"动态ID", "发布时间", "内容"}, rows)
 				next := firstString(data["next_offset"], data["offset"])

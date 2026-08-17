@@ -326,10 +326,15 @@ func NormalizeDynamicItem(item map[string]any) map[string]any {
 	major := Map(dynamic["major"])
 	archive := Map(major["archive"])
 	article := Map(major["article"])
+	opus := Map(major["opus"])
+	summary := Map(opus["summary"])
 	card := DecodeJSON(item["card"])
 	descInfo := Map(item["desc"])
 	identifier := firstString(descInfo["dynamic_id_str"], descInfo["dynamic_id"], item["id_str"], item["id"])
 	text := String(desc["text"])
+	if text == "" {
+		text = String(summary["text"])
+	}
 	if text == "" {
 		for _, key := range []string{"dynamic", "description", "summary", "title"} {
 			if value := String(card[key]); value != "" {
@@ -344,13 +349,13 @@ func NormalizeDynamicItem(item map[string]any) map[string]any {
 	}
 	commentInfo := Map(stat["comment"])
 	likeInfo := Map(stat["like"])
-	ts := ToInt64(descInfo["timestamp"], 0)
+	ts := ToInt64(descInfo["timestamp"], ToInt64(author["pub_ts"], 0))
 	return map[string]any{
 		"id": identifier,
 		"author": map[string]any{"name": String(author["name"])},
 		"published_at":    timestampISO(ts),
 		"published_label": String(author["pub_time"]),
-		"title":           firstString(archive["title"], article["title"]),
+		"title":           firstString(archive["title"], article["title"], opus["title"]),
 		"text":            text,
 		"stats": map[string]any{
 			"comment": ToInt(commentInfo["count"], 0),

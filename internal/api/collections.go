@@ -9,6 +9,9 @@ import (
 	"strings"
 )
 
+const userDynamicFeatures = "itemOpusStyle,listOnlyfans,onlyfansQaCard"
+const userDynamicWebLocation = "333.1387"
+
 func requireCredential(action string, cred *Credential, write bool) error {
 	if cred == nil || !cred.ValidForRead() {
 		return NewError(CodeNotAuthenticated, action, "需要登录")
@@ -106,20 +109,31 @@ func (c *Client) GetDynamicFeed(ctx context.Context, offset string, cred *Creden
 	return mapValue(data), nil
 }
 
-func (c *Client) GetUserDynamics(ctx context.Context, uid int64, offset int64, needTop bool, cred *Credential) (map[string]any, error) {
+func (c *Client) GetUserDynamics(ctx context.Context, uid int64, offset int64, cred *Credential) (map[string]any, error) {
 	if err := requireCredential("获取用户动态", cred, false); err != nil {
 		return nil, err
 	}
+	requestCredential := c.credentialWithDevice(ctx, cred)
 	query := url.Values{
-		"host_mid": []string{fmt.Sprintf("%d", uid)},
-		"offset":   []string{fmt.Sprintf("%d", offset)},
-		"need_top": []string{"0"},
+		"host_mid":                []string{fmt.Sprintf("%d", uid)},
+		"offset":                  []string{""},
+		"timezone_offset":          []string{"-480"},
+		"features":                 []string{userDynamicFeatures},
+		"platform":                 []string{"web"},
+		"web_location":             []string{userDynamicWebLocation},
+		"x-bili-device-req-json": []string{`{"platform":"web","device":"pc","spmid":"333.1387"}`},
 	}
-	if needTop {
-		query.Set("need_top", "1")
+	if offset > 0 {
+		query.Set("offset", fmt.Sprintf("%d", offset))
 	}
+	signed, err := c.signWBI(ctx, query, requestCredential)
+	if err != nil {
+		return nil, withAction("获取用户动态", err)
+	}
+	headers := spaceRequestHeaders(uid)
+	headers.Set("Referer", fmt.Sprintf("https://space.bilibili.com/%d/dynamic", uid))
 	var data map[string]any
-	if err := c.request(ctx, http.MethodGet, "/x/polymer/web-dynamic/v1/feed/space", query, nil, cred, &data); err != nil {
+	if err := c.requestWithHeaders(ctx, http.MethodGet, "/x/polymer/web-dynamic/v1/feed/space", signed, nil, requestCredential, headers, &data); err != nil {
 		return nil, withAction("获取用户动态", err)
 	}
 	return mapValue(data), nil
