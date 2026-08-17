@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -142,4 +143,114 @@ func TestConfigInitCreatesDefaultFile(t *testing.T) {
 	if _, err := os.Stat(app.ConfigStore.File); err != nil {
 		t.Fatalf("config init did not create config file: %v", err)
 	}
+}
+
+func TestVideoSubtitleListsAllTracks(t *testing.T) {
+	server := newSubtitleTestServer(t)
+	defer server.Close()
+	app := newTestApp(t)
+	app.API.BaseURL = server.URL
+	app.API.HTTP = server.Client()
+	stdout := &bytes.Buffer{}
+	app.Out = &output.Writer{Stdout: stdout, Stderr: &bytes.Buffer{}}
+	root := NewRoot(app)
+	root.SetArgs([]string{"video", "subtitle", "BV1ABcsztEcY", "--json"})
+	if err := root.ExecuteContext(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	data := envelope["data"].(map[string]any)
+	subtitles := data["subtitles"].([]any)
+	first := subtitles[0].(map[string]any)
+	second := subtitles[1].(map[string]any)
+	if data["subtitle_count"] != float64(2) || first["line_count"] != float64(2) || second["is_ai"] != true {
+		t.Fatalf("unexpected subtitle payload: %#v", data)
+	}
+}
+
+func TestVideoSubtitleAliasExportsEachTrack(t *testing.T) {
+	server := newSubtitleTestServer(t)
+	defer server.Close()
+	app := newTestApp(t)
+	app.API.BaseURL = server.URL
+	app.API.HTTP = server.Client()
+	app.Out = &output.Writer{Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}}
+	outputDir := t.TempDir()
+	root := NewRoot(app)
+	root.SetArgs([]string{"video", "st", "BV1ABcsztEcY", "-o", outputDir})
+	if err := root.ExecuteContext(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	zhPath := filepath.Join(outputDir, "BV1ABcsztEcY.01.zh-CN.srt")
+	enPath := filepath.Join(outputDir, "BV1ABcsztEcY.02.en-US.srt")
+	zhData, err := os.ReadFile(zhPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(enPath); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(zhData), "00:00:00,000 --> 00:00:01,500") {
+		t.Fatalf("unexpected SRT content: %q", zhData)
+	}
+}
+
+func TestExportSubtitleFilesWritesSingleSRTPath(t *testing.T) {
+	outputPath := filepath.Join(t.TempDir(), "subtitle.srt")
+	items := []subtitleCommandItem{{
+		Track: api.SubtitleTrack{Language: "zh-CN"},
+		Cues:  []api.SubtitleCue{{From: 0, To: 1, Content: "line"}},
+	}}
+	if err := exportSubtitleFiles(outputPath, "BV1ABcsztEcY", items); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(outputPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Size() == 0 || items[0].OutputPath != outputPath {
+		t.Fatalf("unexpected direct subtitle export: %#v", items)
+	}
+}
+
+func TestVideoSubtitleCommandReplacesLegacyFlags(t *testing.T) {
+	root := NewRoot(newTestApp(t))
+	video, _, err := root.Find([]string{"video"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if video.Flags().Lookup("subtitle") != nil {
+		t.Fatal("legacy subtitle flag is still registered")
+	}
+	subtitle, _, err := root.Find([]string{"video", "st"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if subtitle.Name() != "subtitle" {
+		t.Fatalf("unexpected subtitle command: %s", subtitle.Name())
+	}
+}
+
+func newSubtitleTestServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	var serverURL string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/x/player/pagelist":
+			fmt.Fprint(w, `{"code":0,"data":[{"cid":42}]}`)
+		case "/x/player/v2":
+			fmt.Fprintf(w, `{"code":0,"data":{"subtitle":{"subtitles":[{"id":11,"lan":"zh-CN","lan_doc":"中文","subtitle_url":"%s/subtitles/zh.json","author":{"mid":7,"name":"up"},"type":0},{"id":12,"lan":"en-US","lan_doc":"English","subtitle_url":"%s/subtitles/en.json","type":1,"ai_type":3,"ai_status":1}]}}}`, serverURL, serverURL)
+		case "/subtitles/zh.json":
+			fmt.Fprint(w, `{"body":[{"from":0,"to":1.5,"content":"first"},{"from":1.5,"to":3,"content":"second"}]}`)
+		case "/subtitles/en.json":
+			fmt.Fprint(w, `{"body":[{"from":0,"to":1.5,"content":"one"}]}`)
+		default:
+			t.Fatalf("unexpected request path: %s", r.URL.Path)
+		}
+	}))
+	serverURL = server.URL
+	return server
 }

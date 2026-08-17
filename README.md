@@ -4,7 +4,8 @@
 
 ## 功能
 
-- 视频详情, 字幕, AI 总结, 评论和相关推荐.
+- 视频详情, AI 总结, 评论和相关推荐.
+- 字幕轨道列出与导出, 覆盖普通字幕和平台标记的 AI 字幕.
 - UP 主资料, 视频列表, 用户和视频搜索.
 - 热门视频, 排行榜, 收藏夹, 关注, 历史和稍后再看.
 - 动态时间线, 我的动态, 文字动态发布和删除.
@@ -33,6 +34,15 @@ go run ./cmd/bili hot --max 5 --yaml
 go run ./cmd/bili login
 go run ./cmd/bili status --yaml
 ```
+
+## 字幕
+
+```shell
+go run ./cmd/bili video subtitle BV1ABcsztEcY
+go run ./cmd/bili video st BV1ABcsztEcY -o ./subtitles
+```
+
+`bili video subtitle` 会列出播放器接口返回的所有字幕轨道, 包含语言, 字幕类型, AI 标记, 作者和字幕行数. `-o` 接受输出目录, 每条可下载字幕保存为独立的 SRT 文件. 只有一条字幕时, 也可将 `-o` 指向具体的 `.srt` 文件.
 
 配置和认证默认保存在 `~/.config/bilibili-cli/config.toml` 与 `~/.config/bilibili-cli/auth.json`. 如需从已有 cookie 导入, 可以传入 `BILI_COOKIE` 或 Netscape cookie 文件路径 `BILI_COOKIE_FILE`.
 

@@ -12,8 +12,7 @@ import (
 )
 
 func newVideoCommand(app *App) *cobra.Command {
-	var subtitle, subtitleTimeline, comments, showAI, related bool
-	var subtitleFormat string
+	var comments, showAI, related bool
 	var asJSON, asYAML bool
 	command := &cobra.Command{
 		Use:   "video BV_OR_URL",
@@ -24,38 +23,23 @@ func newVideoCommand(app *App) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if subtitleFormat != "timeline" && subtitleFormat != "srt" {
-				return app.Fail(api.NewError(api.CodeInvalidInput, "", "--subtitle-format 仅支持 timeline 或 srt"), "", mode)
-			}
 			bvid, err := app.extractBVID(args[0], mode)
 			if err != nil {
 				return err
 			}
 			ctx := contextOrBackground(cmd.Context())
 			var credential *api.Credential
-			if subtitle || subtitleTimeline || comments || showAI || related {
+			if comments || showAI || related {
 				credential, _ = app.Auth.GetCredential(ctx, auth.ModeOptional)
 			}
 			info, err := app.API.GetVideoInfo(ctx, bvid, nil)
 			if err != nil {
 				return app.apiFailure(err, "获取视频信息失败", mode)
 			}
-			subtitleText := ""
-			subtitleItems := []map[string]any{}
 			aiSummary := ""
 			commentItems := []map[string]any{}
 			relatedItems := []map[string]any{}
 			warnings := []map[string]string{}
-			if subtitle || subtitleTimeline {
-				result, fetchErr := app.API.GetVideoSubtitle(ctx, bvid, credential)
-				if fetchErr != nil {
-					warnings = append(warnings, map[string]string{"code": "subtitle_unavailable", "message": "获取字幕失败"})
-					app.Logger.Warn("获取字幕失败", "error", fetchErr)
-				} else {
-					subtitleText = result.Text
-					subtitleItems = result.Items
-				}
-			}
 			if showAI {
 				result, fetchErr := app.API.GetVideoAIConclusion(ctx, bvid, credential)
 				if fetchErr != nil {
@@ -83,25 +67,9 @@ func newVideoCommand(app *App) *cobra.Command {
 					relatedItems = result
 				}
 			}
-			format := "plain"
-			if subtitleTimeline {
-				format = subtitleFormat
-			}
-			payload := model.NormalizeVideoCommandPayload(info, subtitleText, subtitleItems, format, aiSummary, commentItems, relatedItems, warnings)
+			payload := model.NormalizeVideoCommandPayload(info, aiSummary, commentItems, relatedItems, warnings)
 			return app.Complete(payload, mode, func(w io.Writer) {
 				renderVideo(w, info, bvid)
-				if subtitle || subtitleTimeline {
-					fmt.Fprintln(w, "\n字幕内容:")
-					content := subtitleText
-					if subtitleTimeline && len(subtitleItems) > 0 {
-						content = api.FormatSubtitleTimeline(subtitleItems, subtitleFormat)
-					}
-					if content == "" {
-						fmt.Fprintln(w, "无字幕")
-					} else {
-						fmt.Fprintln(w, content)
-					}
-				}
 				if showAI {
 					fmt.Fprintln(w, "\nAI 总结:")
 					if aiSummary == "" {
@@ -130,13 +98,11 @@ func newVideoCommand(app *App) *cobra.Command {
 			})
 		},
 	}
-	command.Flags().BoolVarP(&subtitle, "subtitle", "s", false, "显示字幕")
-	command.Flags().BoolVarP(&subtitleTimeline, "subtitle-timeline", "t", false, "显示带时间线的字幕")
-	command.Flags().StringVar(&subtitleFormat, "subtitle-format", "timeline", "字幕格式: timeline 或 srt")
 	command.Flags().BoolVarP(&comments, "comments", "c", false, "显示评论")
 	command.Flags().BoolVar(&showAI, "ai", false, "显示 AI 总结")
 	command.Flags().BoolVarP(&related, "related", "r", false, "显示相关推荐")
 	addStructuredFlags(command, &asJSON, &asYAML)
+	command.AddCommand(newSubtitleCommand(app))
 	return command
 }
 
@@ -168,4 +134,3 @@ func min(left, right int) int {
 	}
 	return right
 }
-

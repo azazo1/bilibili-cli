@@ -25,15 +25,56 @@ func TestExtractBVID(t *testing.T) {
 	}
 }
 
-func TestFormatSubtitleTimeline(t *testing.T) {
-	items := []map[string]any{
-		{"from": 0.0, "to": 2.5, "content": "first"},
-		{"from": 2.5, "to": 5.0, "content": "second"},
+func TestFormatSubtitleSRT(t *testing.T) {
+	cues := []SubtitleCue{
+		{From: 0.0, To: 2.5, Content: "first"},
+		{From: 2.5, To: 5.0, Content: "second"},
 	}
-	got := FormatSubtitleTimeline(items, "srt")
+	got := FormatSubtitleSRT(cues)
 	expected := "1\n00:00:00,000 --> 00:00:02,500\nfirst\n\n2\n00:00:02,500 --> 00:00:05,000\nsecond\n"
 	if got != expected {
 		t.Fatalf("unexpected SRT output: %q", got)
+	}
+}
+
+func TestGetVideoSubtitleTracksAndDownload(t *testing.T) {
+	var serverURL string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/x/player/pagelist":
+			fmt.Fprint(w, `{"code":0,"data":[{"cid":42}]}`)
+		case "/x/player/v2":
+			if r.URL.Query().Get("cid") != "42" {
+				t.Fatalf("unexpected cid: %s", r.URL.Query().Get("cid"))
+			}
+			fmt.Fprintf(w, `{"code":0,"data":{"subtitle":{"subtitles":[{"id":11,"lan":"zh-CN","lan_doc":"中文","subtitle_url":"%s/subtitles/zh.json","author":{"mid":7,"name":"up"},"type":0},{"id":12,"lan":"en-US","lan_doc":"English","subtitle_url":"%s/subtitles/en.json","type":1,"ai_type":3,"ai_status":1}]}}}`, serverURL, serverURL)
+		case "/subtitles/zh.json":
+			fmt.Fprint(w, `{"body":[{"from":0,"to":1.5,"content":"first"},{"from":1.5,"to":3,"content":"second"}]}`)
+		case "/subtitles/en.json":
+			fmt.Fprint(w, `{"body":[{"from":0,"to":1.5,"content":"one"}]}`)
+		default:
+			t.Fatalf("unexpected request path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	serverURL = server.URL
+
+	client := NewClient()
+	client.BaseURL = server.URL
+	client.HTTP = server.Client()
+	tracks, err := client.GetVideoSubtitleTracks(context.Background(), "BV1ABcsztEcY", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tracks) != 2 || tracks[0].Language != "zh-CN" || !tracks[1].IsAI() || tracks[1].AIType != 3 {
+		t.Fatalf("unexpected subtitle tracks: %#v", tracks)
+	}
+	cues, err := client.DownloadSubtitle(context.Background(), tracks[0], nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cues) != 2 || cues[1].From != 1.5 || cues[1].Content != "second" {
+		t.Fatalf("unexpected subtitle cues: %#v", cues)
 	}
 }
 

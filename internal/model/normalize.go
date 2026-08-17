@@ -216,18 +216,6 @@ func NormalizeVideoSummary(value map[string]any) map[string]any {
 	}
 }
 
-func NormalizeSubtitleItems(raw []map[string]any) []map[string]any {
-	items := make([]map[string]any, 0, len(raw))
-	for _, item := range raw {
-		items = append(items, map[string]any{
-			"from":    ToFloat(item["from"], 0),
-			"to":      ToFloat(item["to"], 0),
-			"content": String(item["content"]),
-		})
-	}
-	return items
-}
-
 func NormalizeComment(item map[string]any) map[string]any {
 	member := Map(item["member"])
 	content := Map(item["content"])
@@ -364,7 +352,7 @@ func NormalizeDynamicItem(item map[string]any) map[string]any {
 	}
 }
 
-func NormalizeVideoCommandPayload(info map[string]any, subtitleText string, subtitleItems []map[string]any, subtitleFormat, aiSummary string, comments, related []map[string]any, warnings []map[string]string) map[string]any {
+func NormalizeVideoCommandPayload(info map[string]any, aiSummary string, comments, related []map[string]any, warnings []map[string]string) map[string]any {
 	normalizedComments := make([]map[string]any, 0, len(comments))
 	for _, item := range comments {
 		normalizedComments = append(normalizedComments, NormalizeComment(item))
@@ -374,13 +362,7 @@ func NormalizeVideoCommandPayload(info map[string]any, subtitleText string, subt
 		normalizedRelated = append(normalizedRelated, NormalizeVideoSummary(item))
 	}
 	return map[string]any{
-		"video": NormalizeVideoSummary(info),
-		"subtitle": map[string]any{
-			"available": len(subtitleText) > 0 || len(subtitleItems) > 0,
-			"format":    subtitleFormat,
-			"text":      subtitleText,
-			"items":     NormalizeSubtitleItems(subtitleItems),
-		},
+		"video":      NormalizeVideoSummary(info),
 		"ai_summary": aiSummary,
 		"comments":   normalizedComments,
 		"related":    normalizedRelated,
