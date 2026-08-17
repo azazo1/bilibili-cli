@@ -3,10 +3,13 @@ package cli
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/azazo1/bilibili-cli/internal/api"
 	"github.com/azazo1/bilibili-cli/internal/model"
+	"github.com/azazo1/bilibili-cli/internal/output"
 )
 
 func newVideoCommand(app *App) *cobra.Command {
@@ -31,10 +34,15 @@ func newVideoCommand(app *App) *cobra.Command {
 			if err != nil {
 				return app.apiFailure(err, "获取视频信息失败", mode)
 			}
+			pages, pagesErr := app.API.GetVideoPages(ctx, bvid, credential)
 			aiSummary := ""
 			commentItems := []map[string]any{}
 			relatedItems := []map[string]any{}
 			warnings := []map[string]string{}
+			if pagesErr != nil {
+				warnings = append(warnings, map[string]string{"code": "pages_unavailable", "message": "获取视频分P信息失败"})
+				app.Logger.Warn("获取视频分P信息失败", "error", pagesErr)
+			}
 			if showAI {
 				result, fetchErr := app.API.GetVideoAIConclusion(ctx, bvid, credential)
 				if fetchErr != nil {
@@ -63,8 +71,10 @@ func newVideoCommand(app *App) *cobra.Command {
 				}
 			}
 			payload := model.NormalizeVideoCommandPayload(info, aiSummary, commentItems, relatedItems, warnings)
+			payload["pages"] = videoPagePayload(pages)
 			return app.CompleteTable(payload, mode, asJSON, asYAML, func(w io.Writer) {
 				renderVideo(app, w, info, bvid)
+				renderVideoPages(app, w, pages)
 				if showAI {
 					fmt.Fprintln(w, "\nAI 总结:")
 					if aiSummary == "" {
@@ -142,6 +152,54 @@ func renderVideo(app *App, w io.Writer, info map[string]any, bvid string) {
 		rows = append(rows, []string{"简介", description})
 	}
 	app.renderTable(w, "视频详情", []string{"字段", "内容"}, rows)
+}
+
+func renderVideoPages(app *App, w io.Writer, pages []api.VideoPage) {
+	if len(pages) <= 1 {
+		return
+	}
+	rows := make([][]string, 0, len(pages))
+	for _, page := range pages {
+		title := strings.TrimSpace(page.Title)
+		if title == "" {
+			title = "未命名"
+		}
+		rows = append(rows, []string{fmt.Sprintf("P%d", page.Page), title})
+	}
+	app.renderTable(w, "\n分P", []string{"分P", "标题"}, rows)
+}
+
+func videoPagePayload(pages []api.VideoPage) []map[string]any {
+	items := make([]map[string]any, 0, len(pages))
+	for _, page := range pages {
+		items = append(items, map[string]any{
+			"page":  page.Page,
+			"cid":   page.CID,
+			"title": page.Title,
+		})
+	}
+	return items
+}
+
+func reportVideoPages(app *App, bvid string, pages []api.VideoPage, exampleCommand string, mode output.Mode) error {
+	err := api.NewError(api.CodeInvalidInput, "", "多分P视频必须通过 URL 的 p 参数指定分P")
+	if mode != output.ModeRich {
+		return app.fail(err, "选择分P", mode, map[string]any{
+			"bvid":    bvid,
+			"pages":   videoPagePayload(pages),
+			"example": fmt.Sprintf("%s %s?p=2", exampleCommand, bvid),
+		})
+	}
+	fmt.Fprintln(app.Out.Stdout, "该视频包含多个分P, 请先选择要下载的分P:")
+	for _, page := range pages {
+		title := strings.TrimSpace(page.Title)
+		if title == "" {
+			title = "未命名"
+		}
+		fmt.Fprintf(app.Out.Stdout, "  P%d: %s\n", page.Page, title)
+	}
+	fmt.Fprintf(app.Out.Stdout, "示例: %s %s?p=2\n", exampleCommand, bvid)
+	return app.Fail(err, "选择分P", mode)
 }
 
 func min(left, right int) int {

@@ -209,10 +209,14 @@ func TestHotCommandUsesNormalizedEnvelope(t *testing.T) {
 
 func TestAnonymousVideoWarningUsesStderr(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/x/web-interface/view" {
+		switch r.URL.Path {
+		case "/x/web-interface/view":
+			fmt.Fprint(w, `{"code":0,"data":{"bvid":"BV1ABcsztEcY","title":"demo","duration":60,"owner":{"mid":1,"name":"up"},"stat":{"view":9}}}`)
+		case "/x/player/pagelist":
+			fmt.Fprint(w, `{"code":0,"data":[{"cid":42,"part":"demo"}]}`)
+		default:
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
-		fmt.Fprint(w, `{"code":0,"data":{"bvid":"BV1ABcsztEcY","title":"demo","duration":60,"owner":{"mid":1,"name":"up"},"stat":{"view":9}}}`)
 	}))
 	defer server.Close()
 
