@@ -6,7 +6,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/azazo1/bilibili-cli/internal/api"
 	"github.com/azazo1/bilibili-cli/internal/model"
 )
 
@@ -17,12 +16,12 @@ func newHotCommand(app *App) *cobra.Command {
 		Use:   "hot",
 		Short: "查看热门视频",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			mode, err := app.mode(asJSON, asYAML)
+			mode, err := app.mode(cmd, asJSON, asYAML)
 			if err != nil {
 				return err
 			}
 			if page < 1 || count < 1 {
-				return app.Fail(api.NewError(api.CodeInvalidInput, "", "--page 和 --max 必须大于 0"), "", mode)
+				return app.invalidInput(cmd, "--page 和 --max 必须大于 0", mode)
 			}
 			data, fetchErr := app.API.GetHotVideos(contextOrBackground(cmd.Context()), page, count)
 			if fetchErr != nil {
@@ -56,12 +55,12 @@ func newRankCommand(app *App) *cobra.Command {
 		Use:   "rank",
 		Short: "查看全站排行榜",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			mode, err := app.mode(asJSON, asYAML)
+			mode, err := app.mode(cmd, asJSON, asYAML)
 			if err != nil {
 				return err
 			}
 			if (day != 3 && day != 7) || count < 1 {
-				return app.Fail(api.NewError(api.CodeInvalidInput, "", "--day 必须是 3 或 7, --max 必须大于 0"), "", mode)
+				return app.invalidInput(cmd, "--day 必须是 3 或 7, --max 必须大于 0", mode)
 			}
 			data, fetchErr := app.API.GetRankVideos(contextOrBackground(cmd.Context()), day)
 			if fetchErr != nil {
@@ -106,4 +105,3 @@ func videoRows(items []map[string]any, rank bool) [][]string {
 	}
 	return rows
 }
-

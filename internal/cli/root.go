@@ -33,6 +33,7 @@ func NewRoot(app *App) *cobra.Command {
 	root.AddCommand(newHotCommand(app), newRankCommand(app))
 	root.AddCommand(newInteractionCommands(app)...)
 	root.AddCommand(newAudioCommand(app))
+	configureUsageErrors(root, app)
 	return root
 }
 

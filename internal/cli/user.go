@@ -38,7 +38,7 @@ func newUserCommand(app *App) *cobra.Command {
 		Short: "查看 UP 主资料",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			mode, err := app.mode(asJSON, asYAML)
+			mode, err := app.mode(cmd, asJSON, asYAML)
 			if err != nil {
 				return err
 			}
@@ -76,12 +76,12 @@ func newUserVideosCommand(app *App) *cobra.Command {
 		Short: "查看 UP 主的视频列表",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			mode, err := app.mode(asJSON, asYAML)
+			mode, err := app.mode(cmd, asJSON, asYAML)
 			if err != nil {
 				return err
 			}
 			if count < 1 {
-				return app.Fail(api.NewError(api.CodeInvalidInput, "", "--max 必须大于 0"), "", mode)
+				return app.invalidInput(cmd, "--max 必须大于 0", mode)
 			}
 			uid, err := resolveUID(cmd, app, args[0], mode)
 			if err != nil {
@@ -122,15 +122,15 @@ func newSearchCommand(app *App) *cobra.Command {
 		Short: "搜索用户或视频",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			mode, err := app.mode(asJSON, asYAML)
+			mode, err := app.mode(cmd, asJSON, asYAML)
 			if err != nil {
 				return err
 			}
 			if page < 1 || count < 1 {
-				return app.Fail(api.NewError(api.CodeInvalidInput, "", "--page 和 --max 必须大于 0"), "", mode)
+				return app.invalidInput(cmd, "--page 和 --max 必须大于 0", mode)
 			}
 			if searchType != "user" && searchType != "video" {
-				return app.Fail(api.NewError(api.CodeInvalidInput, "", "--type 仅支持 user 或 video"), "", mode)
+				return app.invalidInput(cmd, "--type 仅支持 user 或 video", mode)
 			}
 			ctx := contextOrBackground(cmd.Context())
 			if searchType == "video" {

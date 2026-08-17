@@ -9,7 +9,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/azazo1/bilibili-cli/internal/api"
 	"github.com/azazo1/bilibili-cli/internal/auth"
 	"github.com/azazo1/bilibili-cli/internal/media"
 	"github.com/azazo1/bilibili-cli/internal/output"
@@ -28,9 +27,9 @@ func newAudioCommand(app *App) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			mode := output.ModeRich
 			if segment < 5 || segment > 300 {
-				return app.Fail(api.NewError(api.CodeInvalidInput, "", "--segment 范围为 5-300"), "", mode)
+				return app.invalidInput(cmd, "--segment 范围为 5-300", mode)
 			}
-			bvid, err := app.extractBVID(args[0], mode)
+			bvid, err := app.extractBVID(cmd, args[0], mode)
 			if err != nil {
 				return err
 			}
@@ -124,4 +123,3 @@ func expandHome(path string) string {
 	}
 	return path
 }
-

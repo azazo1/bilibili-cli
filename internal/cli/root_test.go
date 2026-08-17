@@ -41,8 +41,133 @@ func TestVideoInvalidBVIDEmitsStructuredError(t *testing.T) {
 		t.Fatalf("invalid JSON: %v", decodeErr)
 	}
 	errorData := payload["error"].(map[string]any)
-	if payload["ok"] != false || errorData["code"] != string(api.CodeInvalidInput) {
+	details := errorData["details"].(map[string]any)
+	if payload["ok"] != false || errorData["code"] != string(api.CodeInvalidInput) || !strings.Contains(details["usage"].(string), "bili video BV_OR_URL") {
 		t.Fatalf("unexpected payload: %#v", payload)
+	}
+}
+
+func TestArgumentErrorIncludesCommandUsage(t *testing.T) {
+	app := newTestApp(t)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	app.Out = &output.Writer{Stdout: stdout, Stderr: stderr, DefaultMode: "rich"}
+	root := NewRoot(app)
+	root.SetArgs([]string{"video"})
+	err := root.ExecuteContext(context.Background())
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != 1 {
+		t.Fatalf("unexpected command error: %v", err)
+	}
+	result := stderr.String()
+	if !strings.Contains(result, "accepts 1 arg(s), received 0") || !strings.Contains(result, "Usage:\n  bili video BV_OR_URL") {
+		t.Fatalf("argument error did not include usage: %q", result)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("unexpected stdout: %q", stdout.String())
+	}
+}
+
+func TestFlagErrorIncludesCommandUsage(t *testing.T) {
+	app := newTestApp(t)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	app.Out = &output.Writer{Stdout: stdout, Stderr: stderr, DefaultMode: "rich"}
+	root := NewRoot(app)
+	root.SetArgs([]string{"video", "--unknown"})
+	err := root.ExecuteContext(context.Background())
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != 1 {
+		t.Fatalf("unexpected command error: %v", err)
+	}
+	result := stderr.String()
+	if !strings.Contains(result, "unknown flag: --unknown") || !strings.Contains(result, "Usage:\n  bili video BV_OR_URL") {
+		t.Fatalf("flag error did not include usage: %q", result)
+	}
+}
+
+func TestArgumentErrorJSONIncludesUsage(t *testing.T) {
+	app := newTestApp(t)
+	stdout := &bytes.Buffer{}
+	app.Out = &output.Writer{Stdout: stdout, Stderr: &bytes.Buffer{}}
+	root := NewRoot(app)
+	root.SetArgs([]string{"video", "--json"})
+	err := root.ExecuteContext(context.Background())
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != 1 {
+		t.Fatalf("unexpected command error: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	errorData := payload["error"].(map[string]any)
+	details := errorData["details"].(map[string]any)
+	if !strings.Contains(details["usage"].(string), "bili video BV_OR_URL") {
+		t.Fatalf("structured usage is missing: %#v", payload)
+	}
+}
+
+func TestInvalidFlagValueIncludesCommandUsage(t *testing.T) {
+	app := newTestApp(t)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	app.Out = &output.Writer{Stdout: stdout, Stderr: stderr, DefaultMode: "rich"}
+	root := NewRoot(app)
+	root.SetArgs([]string{"video", "subtitle", "BV1ABcsztEcY", "--type", "invalid"})
+	err := root.ExecuteContext(context.Background())
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != 1 {
+		t.Fatalf("unexpected command error: %v", err)
+	}
+	result := stderr.String()
+	if !strings.Contains(result, "--type 仅支持 all, ai 或 non-ai") || !strings.Contains(result, "Usage:\n  bili video subtitle BV_OR_URL") {
+		t.Fatalf("invalid flag value did not include usage: %q", result)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("unexpected stdout: %q", stdout.String())
+	}
+}
+
+func TestConflictingOutputFlagsIncludeCommandUsage(t *testing.T) {
+	app := newTestApp(t)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	app.Out = &output.Writer{Stdout: stdout, Stderr: stderr, DefaultMode: "rich"}
+	root := NewRoot(app)
+	root.SetArgs([]string{"video", "BV1ABcsztEcY", "--json", "--yaml"})
+	err := root.ExecuteContext(context.Background())
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != 1 {
+		t.Fatalf("unexpected command error: %v", err)
+	}
+	result := stderr.String()
+	if !strings.Contains(result, "不能同时使用 --json 和 --yaml") || !strings.Contains(result, "Usage:\n  bili video BV_OR_URL") {
+		t.Fatalf("conflicting output flags did not include usage: %q", result)
+	}
+}
+
+func TestUnknownCommandIncludesRootUsage(t *testing.T) {
+	app := newTestApp(t)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	app.Out = &output.Writer{Stdout: stdout, Stderr: stderr, DefaultMode: "rich"}
+	root := NewRoot(app)
+	root.SetArgs([]string{"unknown-command"})
+	command, err := root.ExecuteContextC(context.Background())
+	if err != nil {
+		var exitErr *ExitError
+		if !errors.As(err, &exitErr) {
+			err = app.failUsage(command, err)
+		}
+	}
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != 1 {
+		t.Fatalf("unexpected command error: %v", err)
+	}
+	result := stderr.String()
+	if !strings.Contains(result, "unknown command \"unknown-command\" for \"bili\"") || !strings.Contains(result, "Usage:\n  bili [command]") {
+		t.Fatalf("unknown command did not include usage: %q", result)
 	}
 }
 

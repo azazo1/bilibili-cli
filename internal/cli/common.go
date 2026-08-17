@@ -7,23 +7,25 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"github.com/azazo1/bilibili-cli/internal/api"
 	"github.com/azazo1/bilibili-cli/internal/model"
 	"github.com/azazo1/bilibili-cli/internal/output"
 )
 
-func (a *App) mode(asJSON, asYAML bool) (output.Mode, error) {
+func (a *App) mode(command *cobra.Command, asJSON, asYAML bool) (output.Mode, error) {
 	mode, err := a.ResolveOutput(asJSON, asYAML)
 	if err != nil {
-		return mode, a.Fail(err, "", mode)
+		return mode, a.failUsageWithMode(command, err, "", commandOutputMode(command, a))
 	}
 	return mode, nil
 }
 
-func (a *App) extractBVID(value string, mode output.Mode) (string, error) {
+func (a *App) extractBVID(command *cobra.Command, value string, mode output.Mode) (string, error) {
 	bvid, err := api.ExtractBVID(value)
 	if err != nil {
-		return "", a.Fail(err, "", mode)
+		return "", a.failUsageWithMode(command, err, "", commandOutputMode(command, a))
 	}
 	return bvid, nil
 }
@@ -127,4 +129,3 @@ func contextOrBackground(ctx context.Context) context.Context {
 var htmlTagPattern = regexp.MustCompile(`<[^>]+>`)
 
 func stripHTML(value string) string { return strings.TrimSpace(htmlTagPattern.ReplaceAllString(value, "")) }
-

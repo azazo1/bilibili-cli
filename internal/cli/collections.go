@@ -35,12 +35,12 @@ func newFavoritesCommand(app *App) *cobra.Command {
 		Short: "浏览收藏夹",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			mode, err := app.mode(asJSON, asYAML)
+			mode, err := app.mode(cmd, asJSON, asYAML)
 			if err != nil {
 				return err
 			}
 			if page < 1 {
-				return app.Fail(api.NewError(api.CodeInvalidInput, "", "--page 必须大于 0"), "", mode)
+				return app.invalidInput(cmd, "--page 必须大于 0", mode)
 			}
 			credential, err := app.RequireCredential(contextOrBackground(cmd.Context()), false, mode, "需要登录才能查看收藏夹. 使用 bili login 登录")
 			if err != nil {
@@ -65,7 +65,7 @@ func newFavoritesCommand(app *App) *cobra.Command {
 			}
 			favID, parseErr := strconv.ParseInt(args[0], 10, 64)
 			if parseErr != nil || favID <= 0 {
-				return app.Fail(api.NewError(api.CodeInvalidInput, "", "FAV_ID 必须是正整数"), "", mode)
+				return app.invalidInput(cmd, "FAV_ID 必须是正整数", mode)
 			}
 			data, fetchErr := app.API.GetFavoriteVideos(contextOrBackground(cmd.Context()), favID, page, credential)
 			if fetchErr != nil {
@@ -102,12 +102,12 @@ func newFollowingCommand(app *App) *cobra.Command {
 		Use:   "following",
 		Short: "查看关注列表",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			mode, err := app.mode(asJSON, asYAML)
+			mode, err := app.mode(cmd, asJSON, asYAML)
 			if err != nil {
 				return err
 			}
 			if page < 1 {
-				return app.Fail(api.NewError(api.CodeInvalidInput, "", "--page 必须大于 0"), "", mode)
+				return app.invalidInput(cmd, "--page 必须大于 0", mode)
 			}
 			credential, err := app.RequireCredential(contextOrBackground(cmd.Context()), false, mode, "需要登录才能查看关注列表")
 			if err != nil {
@@ -151,12 +151,12 @@ func newHistoryCommand(app *App) *cobra.Command {
 		Use:   "history",
 		Short: "查看观看历史",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			mode, err := app.mode(asJSON, asYAML)
+			mode, err := app.mode(cmd, asJSON, asYAML)
 			if err != nil {
 				return err
 			}
 			if page < 1 || count < 1 || count > 100 {
-				return app.Fail(api.NewError(api.CodeInvalidInput, "", "--page 必须大于 0, --max 范围为 1-100"), "", mode)
+				return app.invalidInput(cmd, "--page 必须大于 0, --max 范围为 1-100", mode)
 			}
 			credential, err := app.RequireCredential(contextOrBackground(cmd.Context()), false, mode, "需要登录才能查看观看历史")
 			if err != nil {
@@ -199,7 +199,7 @@ func newWatchLaterCommand(app *App) *cobra.Command {
 		Use:   "watch-later",
 		Short: "查看稍后再看列表",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			mode, err := app.mode(asJSON, asYAML)
+			mode, err := app.mode(cmd, asJSON, asYAML)
 			if err != nil {
 				return err
 			}
@@ -238,7 +238,7 @@ func newFeedCommand(app *App) *cobra.Command {
 		Use:   "feed",
 		Short: "查看动态时间线",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			mode, err := app.mode(asJSON, asYAML)
+			mode, err := app.mode(cmd, asJSON, asYAML)
 			if err != nil {
 				return err
 			}
@@ -303,12 +303,12 @@ func newMyDynamicsCommand(app *App) *cobra.Command {
 		Use:   "my-dynamics",
 		Short: "查看我发布的动态",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			mode, err := app.mode(asJSON, asYAML)
+			mode, err := app.mode(cmd, asJSON, asYAML)
 			if err != nil {
 				return err
 			}
 			if offset < 0 || count < 1 || count > 50 {
-				return app.Fail(api.NewError(api.CodeInvalidInput, "", "--offset 必须非负, --max 范围为 1-50"), "", mode)
+				return app.invalidInput(cmd, "--offset 必须非负, --max 范围为 1-50", mode)
 			}
 			if noTop {
 				needTop = false
@@ -368,7 +368,7 @@ func newDynamicPostCommand(app *App) *cobra.Command {
 		Short: "发布一条纯文本动态",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			mode, err := app.mode(asJSON, asYAML)
+			mode, err := app.mode(cmd, asJSON, asYAML)
 			if err != nil {
 				return err
 			}
@@ -389,7 +389,7 @@ func newDynamicPostCommand(app *App) *cobra.Command {
 			}
 			text = strings.TrimSpace(text)
 			if text == "" {
-				return app.Fail(api.NewError(api.CodeInvalidInput, "", "请提供动态文本. 可用 TEXT 或 --from-file FILE"), "", mode)
+				return app.invalidInput(cmd, "请提供动态文本. 可用 TEXT 或 --from-file FILE", mode)
 			}
 			data, fetchErr := app.API.PostTextDynamic(contextOrBackground(cmd.Context()), text, credential)
 			if fetchErr != nil {
@@ -419,13 +419,13 @@ func newDynamicDeleteCommand(app *App) *cobra.Command {
 		Short: "删除一条动态",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			mode, err := app.mode(asJSON, asYAML)
+			mode, err := app.mode(cmd, asJSON, asYAML)
 			if err != nil {
 				return err
 			}
 			id, parseErr := strconv.ParseInt(args[0], 10, 64)
 			if parseErr != nil || id <= 0 {
-				return app.Fail(api.NewError(api.CodeInvalidInput, "", "DYNAMIC_ID 必须是正整数"), "", mode)
+				return app.invalidInput(cmd, "DYNAMIC_ID 必须是正整数", mode)
 			}
 			credential, err := app.RequireCredential(contextOrBackground(cmd.Context()), true, mode, "未登录. 使用 bili login 登录")
 			if err != nil {

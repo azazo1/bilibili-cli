@@ -94,6 +94,10 @@ func (w *Writer) EmitSuccess(data any, mode Mode) error {
 }
 
 func (w *Writer) EmitError(err error, action string, mode Mode) error {
+	return w.EmitErrorWithDetails(err, action, mode, nil)
+}
+
+func (w *Writer) EmitErrorWithDetails(err error, action string, mode Mode, details any) error {
 	code := api.CodeOf(err)
 	message := err.Error()
 	if action != "" {
@@ -102,7 +106,7 @@ func (w *Writer) EmitError(err error, action string, mode Mode) error {
 		}
 	}
 	if mode != ModeRich {
-		return w.Emit(ErrorPayload(code, message, nil), mode)
+		return w.Emit(ErrorPayload(code, message, details), mode)
 	}
 	_, writeErr := fmt.Fprintln(w.Stderr, message)
 	return writeErr

@@ -75,6 +75,10 @@ func (a *App) ResolveOutput(asJSON, asYAML bool) (output.Mode, error) {
 }
 
 func (a *App) Fail(err error, action string, mode output.Mode) error {
+	return a.fail(err, action, mode, nil)
+}
+
+func (a *App) fail(err error, action string, mode output.Mode, details any) error {
 	if err == nil {
 		err = errors.New(action)
 	}
@@ -83,7 +87,7 @@ func (a *App) Fail(err error, action string, mode output.Mode) error {
 		copy.Action = action
 		err = &copy
 	}
-	if writeErr := a.Out.EmitError(err, action, mode); writeErr != nil {
+	if writeErr := a.Out.EmitErrorWithDetails(err, action, mode, details); writeErr != nil {
 		err = fmt.Errorf("%w; output: %v", err, writeErr)
 	}
 	return &ExitError{Code: 1, Rendered: true, Err: err}
@@ -101,7 +105,18 @@ func (a *App) Complete(data any, mode output.Mode, render func(io.Writer)) error
 
 func (a *App) Execute(ctx context.Context) error {
 	root := NewRoot(a)
-	return root.ExecuteContext(ctx)
+	command, err := root.ExecuteContextC(ctx)
+	if err == nil {
+		return nil
+	}
+	var exitErr *ExitError
+	if errors.As(err, &exitErr) {
+		return err
+	}
+	if command == nil {
+		command = root
+	}
+	return a.failUsage(command, err)
 }
 
 func (a *App) RequireCredential(ctx context.Context, write bool, mode output.Mode, message string) (*api.Credential, error) {

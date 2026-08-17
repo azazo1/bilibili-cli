@@ -31,15 +31,15 @@ func newSubtitleCommand(app *App) *cobra.Command {
 		Short:   "列出并导出视频字幕",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			mode, err := app.mode(asJSON, asYAML)
+			mode, err := app.mode(cmd, asJSON, asYAML)
 			if err != nil {
 				return err
 			}
 			subtitleType = strings.ToLower(strings.TrimSpace(subtitleType))
 			if subtitleType != "all" && subtitleType != "ai" && subtitleType != "non-ai" {
-				return app.Fail(api.NewError(api.CodeInvalidInput, "", "--type 仅支持 all, ai 或 non-ai"), "", mode)
+				return app.invalidInput(cmd, "--type 仅支持 all, ai 或 non-ai", mode)
 			}
-			bvid, err := app.extractBVID(args[0], mode)
+			bvid, err := app.extractBVID(cmd, args[0], mode)
 			if err != nil {
 				return err
 			}

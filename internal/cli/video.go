@@ -19,11 +19,11 @@ func newVideoCommand(app *App) *cobra.Command {
 		Short: "查看视频详情",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			mode, err := app.mode(asJSON, asYAML)
+			mode, err := app.mode(cmd, asJSON, asYAML)
 			if err != nil {
 				return err
 			}
-			bvid, err := app.extractBVID(args[0], mode)
+			bvid, err := app.extractBVID(cmd, args[0], mode)
 			if err != nil {
 				return err
 			}
