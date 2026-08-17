@@ -59,3 +59,10 @@ func TestHasPublishedAtRequiresSourceField(t *testing.T) {
 		t.Fatal("published_at did not enable the column")
 	}
 }
+
+func TestUserVideosTitleIncludesOwnerAndUID(t *testing.T) {
+	got := userVideosTitle([]map[string]any{{"owner": map[string]any{"name": "up"}}}, 42)
+	if got != "用户 up (UID: 42) 的最新 1 个视频" {
+		t.Fatalf("userVideosTitle() = %q", got)
+	}
+}

@@ -37,3 +37,12 @@ func TestRenderTableNoTruncateKeepsFullCells(t *testing.T) {
 		t.Fatalf("RenderTable() truncated value: %q", buffer.String())
 	}
 }
+
+func TestDisplayWidthUsesEmojiPresentationWidth(t *testing.T) {
+	if got := displayWidth("⚡️新"); got != 4 {
+		t.Fatalf("displayWidth() = %d, want 4", got)
+	}
+	if got := truncateDisplay("⚡️新", 2); got != "⚡️" {
+		t.Fatalf("truncateDisplay() = %q, want %q", got, "⚡️")
+	}
+}

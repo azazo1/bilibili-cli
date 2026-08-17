@@ -102,6 +102,7 @@ func newUserVideosCommand(app *App) *cobra.Command {
 				payload = append(payload, model.NormalizeVideoSummary(video))
 			}
 			includePublishedAt := hasPublishedAt(payload)
+			title := userVideosTitle(payload, uid)
 			return app.CompleteTable(payload, mode, asJSON, asYAML, func(w io.Writer) {
 				rows := make([][]string, 0, len(videos))
 				for index, video := range videos {
@@ -113,6 +114,7 @@ func newUserVideosCommand(app *App) *cobra.Command {
 					rows = append(rows, append(row, stringValue(normalized["duration"]), formatCount(video["play"])))
 				}
 				if len(rows) == 0 {
+					fmt.Fprintln(w, title)
 					fmt.Fprintln(w, "该用户暂无视频")
 					return
 				}
@@ -121,11 +123,26 @@ func newUserVideosCommand(app *App) *cobra.Command {
 					headers = append(headers, "发布时间")
 				}
 				headers = append(headers, "时长", "播放")
-				app.renderTable(w, fmt.Sprintf("最新 %d 个视频", len(rows)), headers, rows)
+				app.renderTable(w, title, headers, rows)
 			})
 		},
 	}
 	command.Flags().IntVarP(&count, "max", "n", 10, "显示的视频数量")
 	addStructuredFlags(command, &asJSON, &asYAML)
 	return command
+}
+
+func userVideosTitle(videos []map[string]any, uid int64) string {
+	name := ""
+	for _, video := range videos {
+		owner := mapValue(video["owner"])
+		if candidate := strings.TrimSpace(stringValue(owner["name"])); candidate != "" {
+			name = candidate
+			break
+		}
+	}
+	if name == "" {
+		return fmt.Sprintf("用户 UID: %d 的最新 %d 个视频", uid, len(videos))
+	}
+	return fmt.Sprintf("用户 %s (UID: %d) 的最新 %d 个视频", name, uid, len(videos))
 }
