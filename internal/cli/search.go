@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -16,7 +17,7 @@ func newSearchCommand(app *App) *cobra.Command {
 	var asJSON, asYAML bool
 	command := &cobra.Command{
 		Use:   "search KEYWORD",
-		Short: "搜索专栏 视频 用户 番剧 直播或影视",
+		Short: "搜索综合结果或专栏 视频 用户 番剧 直播和影视",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			mode, err := app.mode(cmd, asJSON, asYAML)
@@ -28,7 +29,7 @@ func newSearchCommand(app *App) *cobra.Command {
 			}
 			kind, ok := api.ParseSearchType(searchType)
 			if !ok {
-				return app.invalidInput(cmd, "--type 仅支持 article, video, user, bangumi, live 或 media", mode)
+				return app.invalidInput(cmd, "--type 仅支持 all, article, video, user, bangumi, live 或 media", mode)
 			}
 			order, ok := api.ParseSearchOrder(searchOrder)
 			if !ok {
@@ -50,12 +51,15 @@ func newSearchCommand(app *App) *cobra.Command {
 				payload = append(payload, model.NormalizeSearchResult(string(kind), item))
 			}
 			includePublishedAt := kind == api.SearchTypeVideo || kind == api.SearchTypeArticle
+			if kind == api.SearchTypeAll {
+				includePublishedAt = hasPublishedAt(payload)
+			}
 			return app.CompleteTable(payload, mode, asJSON, asYAML, func(w io.Writer) {
 				app.renderTable(w, searchTitle(kind, order, args[0]), searchHeaders(kind, includePublishedAt), searchRows(kind, payload, includePublishedAt))
 			})
 		},
 	}
-	command.Flags().StringVar(&searchType, "type", "user", "搜索类型: article, video, user, bangumi, live 或 media")
+	command.Flags().StringVar(&searchType, "type", "all", "搜索类型: all, article, video, user, bangumi, live 或 media")
 	command.Flags().StringVar(&searchOrder, "order", "totalrank", "排序: totalrank, click, pubdate, dm 或 stow")
 	command.Flags().IntVar(&page, "page", 1, "页码")
 	command.Flags().IntVarP(&count, "max", "n", 20, "显示数量")
@@ -69,6 +73,12 @@ func searchTitle(kind api.SearchType, order api.SearchOrder, keyword string) str
 
 func searchHeaders(kind api.SearchType, includePublishedAt bool) []string {
 	switch kind {
+	case api.SearchTypeAll:
+		headers := []string{"#", "类型", "ID", "标题", "作者"}
+		if includePublishedAt {
+			headers = append(headers, "发布时间")
+		}
+		return headers
 	case api.SearchTypeArticle:
 		headers := []string{"#", "ID", "标题", "作者", "浏览", "点赞", "评论"}
 		if includePublishedAt {
@@ -113,6 +123,12 @@ func searchRows(kind api.SearchType, items []map[string]any, includePublishedAt 
 	for index, item := range items {
 		prefix := fmt.Sprintf("%d", index+1)
 		switch kind {
+		case api.SearchTypeAll:
+			row := []string{prefix, searchAllResultType(item), searchAllResultID(item), searchAllResultTitle(item), searchAllResultAuthor(item)}
+			if includePublishedAt {
+				row = append(row, publishedTime(item))
+			}
+			rows = append(rows, row)
 		case api.SearchTypeArticle:
 			row := []string{prefix, stringValue(item["id"]), stringValue(item["title"]), stringValue(item["author"]), formatCount(item["view"]), formatCount(item["like"]), formatCount(item["reply"])}
 			if includePublishedAt {
@@ -152,4 +168,36 @@ func searchRows(kind api.SearchType, items []map[string]any, includePublishedAt 
 		}
 	}
 	return rows
+}
+
+func searchAllResultType(item map[string]any) string {
+	resultType := stringValue(item["result_type"])
+	if parsed, ok := api.ParseSearchType(resultType); ok {
+		return parsed.Label()
+	}
+	return resultType
+}
+
+func searchAllResultID(item map[string]any) string {
+	return firstSearchValue(item["bvid"], item["uid"], item["id"], item["room_id"], item["mid"], item["aid"])
+}
+
+func searchAllResultTitle(item map[string]any) string {
+	return firstSearchValue(item["title"], item["name"], item["uname"])
+}
+
+func searchAllResultAuthor(item map[string]any) string {
+	if resultType := stringValue(item["result_type"]); resultType == "bili_user" || resultType == "user" {
+		return ""
+	}
+	return firstSearchValue(item["author"], item["uname"], item["name"])
+}
+
+func firstSearchValue(values ...any) string {
+	for _, value := range values {
+		if text := strings.TrimSpace(stringValue(value)); text != "" {
+			return text
+		}
+	}
+	return ""
 }

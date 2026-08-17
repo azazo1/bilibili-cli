@@ -43,12 +43,40 @@ func TestSearchForwardsTypeOrderAndHeaders(t *testing.T) {
 	}
 }
 
+func TestSearchDefaultsToAllAndFlattensResultGroups(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/x/web-interface/wbi/search/all/v2" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		query := r.URL.Query()
+		if query.Get("keyword") != "topic" || query.Get("page") != "2" || query.Get("order") != "totalrank" {
+			t.Fatalf("unexpected query: %s", r.URL.RawQuery)
+		}
+		fmt.Fprint(w, `{"code":0,"data":{"result":[{"result_type":"video","data":[{"bvid":"BV1video","title":"video"}]},{"result_type":"bili_user","data":[{"mid":42,"uname":"user"}]}]}}`)
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	client.BaseURL = server.URL
+	client.HTTP = server.Client()
+	client.device = &Credential{Buvid3: "b3", Buvid4: "b4"}
+	client.deviceExpires = time.Now().Add(time.Hour)
+	client.wbiKey = strings.Repeat("a", 32)
+	client.wbiExpires = time.Now().Add(time.Hour)
+	items, err := client.Search(context.Background(), "topic", SearchOptions{Page: 2})
+	if err != nil || len(items) != 2 || stringValue(items[0]["result_type"]) != "video" || stringValue(items[1]["result_type"]) != "bili_user" {
+		t.Fatalf("Search() = %#v, %v", items, err)
+	}
+}
+
 func TestSearchTypeAndOrderAliases(t *testing.T) {
 	typeCase := []struct {
 		input string
 		want  SearchType
 		api   string
 	}{
+		{"all", SearchTypeAll, "all"},
+		{"综合", SearchTypeAll, "all"},
 		{"article", SearchTypeArticle, "article"},
 		{"视频", SearchTypeVideo, "video"},
 		{"bili_user", SearchTypeUser, "bili_user"},

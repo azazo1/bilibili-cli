@@ -72,7 +72,7 @@ func TestCompleteTableKeepsExplicitYAML(t *testing.T) {
 }
 
 func TestSearchRowsIncludePublishedColumn(t *testing.T) {
-	for _, kind := range []string{"article", "video", "user", "bangumi", "live", "media"} {
+	for _, kind := range []string{"all", "article", "video", "user", "bangumi", "live", "media"} {
 		parsed, ok := api.ParseSearchType(kind)
 		if !ok {
 			t.Fatalf("ParseSearchType(%q) failed", kind)
@@ -81,6 +81,26 @@ func TestSearchRowsIncludePublishedColumn(t *testing.T) {
 		if !strings.Contains(strings.Join(headers, "|"), "发布时间") {
 			t.Fatalf("headers missing published column: %#v", headers)
 		}
+	}
+}
+
+func TestSearchCommandDefaultsToAll(t *testing.T) {
+	command := newSearchCommand(newTestApp(t))
+	flag := command.Flags().Lookup("type")
+	if flag == nil || flag.DefValue != "all" {
+		t.Fatalf("search type default = %v", flag)
+	}
+}
+
+func TestSearchAllRowsUseResultType(t *testing.T) {
+	rows := searchRows(api.SearchTypeAll, []map[string]any{{
+		"result_type": "video",
+		"bvid":        "BV1test",
+		"title":       "video",
+		"author":      "up",
+	}}, false)
+	if len(rows) != 1 || strings.Join(rows[0], "|") != "1|视频|BV1test|video|up" {
+		t.Fatalf("unexpected all search rows: %#v", rows)
 	}
 }
 

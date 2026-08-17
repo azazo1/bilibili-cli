@@ -91,7 +91,8 @@ bili search "关键词" --type article --order pubdate
 bili search "关键词" --type bangumi --order click
 ```
 
-`--type` 支持 `article`, `video`, `user`, `bangumi`, `live`, `media`.
+`--type` 支持 `all`, `article`, `video`, `user`, `bangumi`, `live`, `media`.
+省略 `--type` 时使用综合搜索, 也可以显式指定 `all`.
 `--order` 支持 `totalrank`, `click`, `pubdate`, `dm`, `stow`.
 表格在 PTY 中会按终端宽度对齐并截断可变长列. `--no-truncate` 可关闭截断. 非 PTY 的表格输出为未截断 TSV.
 

@@ -11,6 +11,7 @@ import (
 type SearchType string
 
 const (
+	SearchTypeAll      SearchType = "all"
 	SearchTypeArticle  SearchType = "article"
 	SearchTypeVideo    SearchType = "video"
 	SearchTypeUser     SearchType = "user"
@@ -37,6 +38,8 @@ type SearchOptions struct {
 
 func ParseSearchType(value string) (SearchType, bool) {
 	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "all", "综合", "综合搜索":
+		return SearchTypeAll, true
 	case "article", "专栏":
 		return SearchTypeArticle, true
 	case "video", "视频":
@@ -73,6 +76,8 @@ func ParseSearchOrder(value string) (SearchOrder, bool) {
 
 func (t SearchType) Label() string {
 	switch t {
+	case SearchTypeAll:
+		return "综合"
 	case SearchTypeArticle:
 		return "专栏"
 	case SearchTypeVideo:
@@ -111,9 +116,8 @@ func (c *Client) Search(ctx context.Context, keyword string, options SearchOptio
 	if strings.TrimSpace(keyword) == "" {
 		return nil, NewError(CodeInvalidInput, "搜索", "搜索关键词不能为空")
 	}
-	searchType, ok := options.Type.apiValue()
-	if !ok {
-		return nil, NewError(CodeInvalidInput, "搜索", "不支持的搜索类型: "+string(options.Type))
+	if options.Type == "" {
+		options.Type = SearchTypeAll
 	}
 	if options.Order == "" {
 		options.Order = SearchOrderComprehensive
@@ -125,6 +129,13 @@ func (c *Client) Search(ctx context.Context, keyword string, options SearchOptio
 	options.Order = order
 	if options.Page < 1 {
 		options.Page = 1
+	}
+	if options.Type == SearchTypeAll {
+		return c.searchAll(ctx, keyword, options.Order, options.Page, "搜索综合")
+	}
+	searchType, ok := options.Type.apiValue()
+	if !ok {
+		return nil, NewError(CodeInvalidInput, "搜索", "不支持的搜索类型: "+string(options.Type))
 	}
 	return c.search(ctx, keyword, searchType, options.Order, options.Page, "搜索"+options.Type.Label())
 }
@@ -169,8 +180,52 @@ func (c *Client) search(ctx context.Context, keyword, searchType string, order S
 	return mapList(mapValue(data)["result"]), nil
 }
 
+func (c *Client) searchAll(ctx context.Context, keyword string, order SearchOrder, page int, action string) ([]map[string]any, error) {
+	query := url.Values{
+		"keyword": []string{keyword},
+		"page":    []string{fmt.Sprintf("%d", page)},
+		"order":   []string{string(order)},
+	}
+	requestCredential := c.credentialWithDevice(ctx, nil)
+	headers := searchRequestHeaders(keyword, "all")
+	var data map[string]any
+	var requestErr error
+	if signed, signErr := c.signWBI(ctx, query, requestCredential); signErr == nil {
+		requestErr = c.requestWithHeaders(ctx, http.MethodGet, "/x/web-interface/wbi/search/all/v2", signed, nil, requestCredential, headers, &data)
+	} else {
+		requestErr = signErr
+	}
+	if requestErr != nil {
+		if CodeOf(requestErr) == CodeRateLimited {
+			return nil, withAction(action, requestErr)
+		}
+		requestErr = c.requestWithHeaders(ctx, http.MethodGet, "/x/web-interface/search/all/v2", query, nil, requestCredential, headers, &data)
+	}
+	if requestErr != nil {
+		return nil, withAction(action, requestErr)
+	}
+	groups := mapList(mapValue(data)["result"])
+	results := make([]map[string]any, 0)
+	for _, group := range groups {
+		resultType := stringValue(group["result_type"])
+		for _, item := range mapList(group["data"]) {
+			copy := make(map[string]any, len(item)+1)
+			for key, value := range item {
+				copy[key] = value
+			}
+			if resultType != "" {
+				copy["result_type"] = resultType
+			}
+			results = append(results, copy)
+		}
+	}
+	return results, nil
+}
+
 func (t SearchType) apiValue() (string, bool) {
 	switch t {
+	case SearchTypeAll:
+		return "all", true
 	case SearchTypeArticle:
 		return "article", true
 	case SearchTypeVideo:

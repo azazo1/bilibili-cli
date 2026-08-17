@@ -39,3 +39,14 @@ func TestNormalizeSearchVideoMapsSearchStats(t *testing.T) {
 		t.Fatalf("unexpected normalized video: %#v", got)
 	}
 }
+
+func TestNormalizeSearchAllKeepsResultType(t *testing.T) {
+	got := NormalizeSearchResult("all", map[string]any{
+		"result_type": "video",
+		"bvid":        "BV1test",
+		"title":       "video",
+	})
+	if got["result_type"] != "video" || got["bvid"] != "BV1test" {
+		t.Fatalf("unexpected normalized all result: %#v", got)
+	}
+}

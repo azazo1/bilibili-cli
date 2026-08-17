@@ -4,6 +4,14 @@ import "strings"
 
 func NormalizeSearchResult(searchType string, item map[string]any) map[string]any {
 	switch searchType {
+	case "all":
+		resultType := String(item["result_type"])
+		if resultType != "" && resultType != "all" {
+			normalized := NormalizeSearchResult(resultType, item)
+			normalized["result_type"] = resultType
+			return normalized
+		}
+		return normalizeSearchFallback(item)
 	case "article":
 		return NormalizeSearchArticle(item)
 	case "video":
@@ -15,12 +23,16 @@ func NormalizeSearchResult(searchType string, item map[string]any) map[string]an
 	case "live", "live_room":
 		return NormalizeSearchLive(item)
 	default:
-		return map[string]any{
-			"id":           firstString(item["id"], item["aid"]),
-			"title":        StripHTML(item["title"]),
-			"author":       firstString(item["author"], item["uname"]),
-			"published_at": searchPublishedAt(item),
-		}
+		return normalizeSearchFallback(item)
+	}
+}
+
+func normalizeSearchFallback(item map[string]any) map[string]any {
+	return map[string]any{
+		"id":           firstString(item["id"], item["aid"]),
+		"title":        StripHTML(item["title"]),
+		"author":       firstString(item["author"], item["uname"]),
+		"published_at": searchPublishedAt(item),
 	}
 }
 
