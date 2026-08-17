@@ -23,6 +23,7 @@ const defaultBaseURL = "https://api.bilibili.com"
 const defaultVCBaseURL = "https://api.vc.bilibili.com"
 const defaultPassportBaseURL = "https://passport.bilibili.com"
 const defaultAppBaseURL = "https://app.bilibili.com"
+const defaultGeetestBaseURL = "https://api.geetest.com"
 
 const appKey = "dfca71928277209b"
 const appSecret = "b5475a8825547a4fc26c7d518eaaa02e"
@@ -35,6 +36,7 @@ type Client struct {
 	VCBaseURL       string
 	PassportBaseURL string
 	AppBaseURL      string
+	GeetestBaseURL  string
 	HTTP            *http.Client
 	UserAgent       string
 	Logger          *slog.Logger
@@ -79,6 +81,7 @@ func NewClient() *Client {
 		VCBaseURL:       vcBase,
 		PassportBaseURL: passportBase,
 		AppBaseURL:      appBase,
+		GeetestBaseURL:  defaultGeetestBaseURL,
 		HTTP:            &http.Client{Timeout: timeout},
 		UserAgent:       userAgent,
 		Logger:          slog.Default(),

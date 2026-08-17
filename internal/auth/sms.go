@@ -42,7 +42,7 @@ func (s *Store) SMSLogin(ctx context.Context, options SMSLoginOptions, in io.Rea
 	}
 	captchaKey := strings.TrimSpace(options.CaptchaKey)
 	if captchaKey == "" {
-		result, err := s.Client.SendSMSCodeRequest(ctx, api.SMSCodeRequest{
+		request := api.SMSCodeRequest{
 			Phone:            phone,
 			CountryCode:      options.CountryCode,
 			CaptchaToken:     options.CaptchaToken,
@@ -50,15 +50,27 @@ func (s *Store) SMSLogin(ctx context.Context, options SMSLoginOptions, in io.Rea
 			CaptchaSeccode:   options.CaptchaSeccode,
 			CaptchaChallenge: options.CaptchaChallenge,
 			Captcha:          options.Captcha,
-		})
+		}
+		result, err := s.Client.SendSMSCodeRequest(ctx, request)
 		if err != nil {
 			return nil, err
 		}
 		if result.RecaptchaURL != "" {
-			if out != nil {
-				fmt.Fprintf(out, "需要完成图形验证, 请打开: %s\n", result.RecaptchaURL)
+			captcha, captchaErr := s.completeGeetest(ctx, result.RecaptchaURL, out)
+			if captchaErr != nil {
+				return nil, captchaErr
 			}
-			return nil, api.NewError(api.CodePermissionDenied, "短信登录", "Bilibili 要求完成图形验证, 请提供验证码参数后重试")
+			request.CaptchaToken = captcha.CaptchaToken
+			request.CaptchaValidate = captcha.CaptchaValidate
+			request.CaptchaSeccode = captcha.CaptchaSeccode
+			request.CaptchaChallenge = captcha.CaptchaChallenge
+			result, err = s.Client.SendSMSCodeRequest(ctx, request)
+			if err != nil {
+				return nil, err
+			}
+			if result.RecaptchaURL != "" {
+				return nil, api.NewError(api.CodePermissionDenied, "短信登录", "图形验证后仍被要求验证, 请重新登录")
+			}
 		}
 		captchaKey = result.CaptchaKey
 		if out != nil {

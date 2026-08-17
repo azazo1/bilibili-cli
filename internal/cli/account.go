@@ -14,8 +14,7 @@ import (
 )
 
 func newAccountCommands(app *App) []*cobra.Command {
-	var phone, code, captchaKey string
-	var captchaToken, captchaValidate, captchaSeccode, captchaChallenge, captcha string
+	var phone, code string
 	var countryCode int
 	var sms, asJSON, asYAML bool
 	login := &cobra.Command{
@@ -49,15 +48,9 @@ func newAccountCommands(app *App) []*cobra.Command {
 				interactionOut = io.Discard
 			}
 			credential, loginErr := app.Auth.SMSLogin(contextOrBackground(cmd.Context()), auth.SMSLoginOptions{
-				Phone:            phone,
-				CountryCode:      countryCode,
-				Code:             code,
-				CaptchaKey:       captchaKey,
-				CaptchaToken:     captchaToken,
-				CaptchaValidate:  captchaValidate,
-				CaptchaSeccode:   captchaSeccode,
-				CaptchaChallenge: captchaChallenge,
-				Captcha:          captcha,
+				Phone:       phone,
+				CountryCode: countryCode,
+				Code:        code,
 			}, app.In, interactionOut)
 			if loginErr != nil {
 				return app.Fail(loginErr, "短信登录失败", mode)
@@ -68,12 +61,6 @@ func newAccountCommands(app *App) []*cobra.Command {
 	login.Flags().StringVar(&phone, "phone", "", "手机号")
 	login.Flags().IntVarP(&countryCode, "country-code", "c", 86, "国家区号")
 	login.Flags().StringVar(&code, "code", "", "短信验证码")
-	login.Flags().StringVar(&captchaKey, "captcha-key", "", "短信验证码请求返回的 captcha_key")
-	login.Flags().StringVar(&captchaToken, "captcha-token", "", "人机验证 token")
-	login.Flags().StringVar(&captchaValidate, "captcha-validate", "", "极验 validate")
-	login.Flags().StringVar(&captchaSeccode, "captcha-seccode", "", "极验 seccode")
-	login.Flags().StringVar(&captchaChallenge, "captcha-challenge", "", "极验 challenge")
-	login.Flags().StringVar(&captcha, "captcha", "", "图形验证码")
 	login.Flags().BoolVar(&sms, "sms", false, "使用手机号短信登录")
 	addStructuredFlags(login, &asJSON, &asYAML)
 	logout := &cobra.Command{
