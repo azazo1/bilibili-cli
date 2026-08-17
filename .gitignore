@@ -12,3 +12,5 @@ coverage.out
 *.m4a
 *.m4s
 *.wav
+
+AGENTS.local.md
