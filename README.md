@@ -62,6 +62,8 @@ bili video download BV1ABcsztEcY --with-srt
 
 `bili video download` 默认保存到当前文件夹. DASH 地址会分别保存 `<标题>_audio.m4a` 和 `<标题>_video.m4a`, 然后尝试使用 `ffmpeg -c copy` 生成 `<标题>.mp4`. `--no-merge` 可保留两个流而不合并. 原生 `durl` 地址会直接保存一个 `.mp4`.
 
+媒体下载会在服务器支持 HTTP Range 时使用配置的并发线程数分段下载, 不支持时自动回退为单请求下载.
+
 多分P视频必须在 URL 中指定 `?p=N`. 未指定时会列出所有分P及其标题, 不会下载第一P. 文件名会包含 `P` 序号和该分P的标题. `--with-srt` 会尝试选择并保存一条字幕, 优先中文, 同语言优先人工字幕, 其次 AI, 再按英文和其他语言兜底. 交互终端会显示下载进度条. `--audio-only` 和 `--video-only` 不能同时使用.
 
 其他命令按领域组织在 `bili me`, `bili user`, `bili video` 和 `bili dynamic` 下. 例如 `bili user video UID_OR_NAME`, `bili user follow UID`, `bili me fav`, `bili video watch` 和 `bili dynamic post TEXT`.
@@ -72,8 +74,16 @@ bili video download BV1ABcsztEcY --with-srt
 
 使用 `bili config init` 创建默认 `config.toml`. 根目录的 [`config.toml.example`](./config.toml.example) 可作为手动创建配置的模板.
 
+```shell
+bili config status
+bili config status --json
+bili config upgrade
+```
+
+`bili config status` 显示配置文件和每个已知字段的 `missing`, `set` 或 `error` 状态, 并列出解析错误. `bili config upgrade` 会将已有配置合并到当前格式, 补齐所有默认值并写回文件.
+
 ```toml
-version = 1
+version = 2
 
 [output]
 format = "auto"
@@ -81,12 +91,17 @@ format = "auto"
 [network]
 timeout_seconds = 30
 
+[download]
+threads = 8
+
 [safety]
 read_only = false
 confirm_dangerous_actions = true
 ```
 
 `output.format` 支持 `auto`, `rich`, `json`, `yaml`. `OUTPUT` 环境变量会覆盖这个值.
+
+`download.threads` 控制媒体分段下载的并发线程数, 默认值为 `8`, 可设置为 `1` 到 `128`.
 
 `safety.read_only = true` 会拒绝动态发布和删除, 点赞, 投币, 一键三连, 取关等账户侧写操作. `me login` 和 `me logout` 仍然可用. `confirm_dangerous_actions` 控制删除动态和取关是否需要额外确认.
 

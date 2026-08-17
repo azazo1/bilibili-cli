@@ -17,7 +17,7 @@ func NewRoot(app *App) *cobra.Command {
 		SilenceErrors: true,
 		PersistentPreRunE: func(command *cobra.Command, _ []string) error {
 			app.setupLogging(verbose)
-			if app.ConfigErr != nil && command.CommandPath() != "bili config init" {
+			if app.ConfigErr != nil && !isConfigRecoveryCommand(command.CommandPath()) {
 				return app.Fail(api.NewError(api.CodeInvalidInput, "", "加载 config.toml 失败: "+app.ConfigErr.Error()), "", output.ModeRich)
 			}
 			return nil
@@ -30,6 +30,15 @@ func NewRoot(app *App) *cobra.Command {
 	root.AddCommand(newConfigCommand(app))
 	configureUsageErrors(root, app)
 	return root
+}
+
+func isConfigRecoveryCommand(path string) bool {
+	switch path {
+	case "bili config init", "bili config status", "bili config upgrade":
+		return true
+	default:
+		return false
+	}
 }
 
 func addStructuredFlags(command *cobra.Command, asJSON, asYAML *bool) {

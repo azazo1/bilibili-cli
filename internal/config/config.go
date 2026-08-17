@@ -10,10 +10,10 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
-const CurrentVersion = 1
+const CurrentVersion = 2
 
 const DefaultTOML = `# Bilibili CLI settings.
-version = 1
+version = 2
 
 [output]
 # auto, rich, json, or yaml.
@@ -21,6 +21,10 @@ format = "auto"
 
 [network]
 timeout_seconds = 30
+
+[download]
+# 媒体下载使用的 HTTP Range 并发线程数.
+threads = 8
 
 [safety]
 # Block account write actions and dangerous operations.
@@ -30,23 +34,28 @@ confirm_dangerous_actions = true
 `
 
 type Config struct {
-	Version int           `toml:"version"`
-	Output  OutputConfig  `toml:"output"`
-	Network NetworkConfig `toml:"network"`
-	Safety  SafetyConfig  `toml:"safety"`
+	Version  int            `toml:"version" json:"version" yaml:"version"`
+	Output   OutputConfig   `toml:"output" json:"output" yaml:"output"`
+	Network  NetworkConfig  `toml:"network" json:"network" yaml:"network"`
+	Download DownloadConfig `toml:"download" json:"download" yaml:"download"`
+	Safety   SafetyConfig   `toml:"safety" json:"safety" yaml:"safety"`
 }
 
 type OutputConfig struct {
-	Format string `toml:"format"`
+	Format string `toml:"format" json:"format" yaml:"format"`
 }
 
 type NetworkConfig struct {
-	TimeoutSeconds int `toml:"timeout_seconds"`
+	TimeoutSeconds int `toml:"timeout_seconds" json:"timeout_seconds" yaml:"timeout_seconds"`
+}
+
+type DownloadConfig struct {
+	Threads int `toml:"threads" json:"threads" yaml:"threads"`
 }
 
 type SafetyConfig struct {
-	ReadOnly                bool `toml:"read_only"`
-	ConfirmDangerousActions bool `toml:"confirm_dangerous_actions"`
+	ReadOnly                bool `toml:"read_only" json:"read_only" yaml:"read_only"`
+	ConfirmDangerousActions bool `toml:"confirm_dangerous_actions" json:"confirm_dangerous_actions" yaml:"confirm_dangerous_actions"`
 }
 
 func Default() Config {
@@ -57,6 +66,9 @@ func Default() Config {
 		},
 		Network: NetworkConfig{
 			TimeoutSeconds: 30,
+		},
+		Download: DownloadConfig{
+			Threads: 8,
 		},
 		Safety: SafetyConfig{
 			ReadOnly:                false,
@@ -90,14 +102,9 @@ func (s *Store) Load() (Config, error) {
 	if err != nil {
 		return Config{}, fmt.Errorf("读取配置失败: %w", err)
 	}
-	config, migrated, err := decode(data)
+	config, _, err := decode(data)
 	if err != nil {
 		return Config{}, err
-	}
-	if migrated {
-		if err := s.Save(config); err != nil {
-			return Config{}, err
-		}
 	}
 	return config, nil
 }
@@ -189,6 +196,15 @@ func decode(data []byte) (Config, bool, error) {
 	if err := toml.Unmarshal(data, &config); err != nil {
 		return Config{}, false, fmt.Errorf("解析 config.toml 失败: %w", err)
 	}
+	var raw map[string]any
+	if err := toml.Unmarshal(data, &raw); err != nil {
+		return Config{}, false, fmt.Errorf("解析 config.toml 失败: %w", err)
+	}
+	if value, present := rawPath(raw, "download", "threads"); present {
+		if number, ok := rawIntValue(value); ok && number == 0 {
+			return Config{}, false, fmt.Errorf("download.threads 必须在 1 到 128 之间")
+		}
+	}
 	config, migrated, err := migrate(config, version.Version)
 	if err != nil {
 		return Config{}, false, err
@@ -198,6 +214,57 @@ func decode(data []byte) (Config, bool, error) {
 		return Config{}, false, err
 	}
 	return normalized, migrated || changed, nil
+}
+
+func rawIntValue(value any) (int, bool) {
+	switch number := value.(type) {
+	case int:
+		return number, true
+	case int8:
+		return int(number), true
+	case int16:
+		return int(number), true
+	case int32:
+		return int(number), true
+	case int64:
+		return int(number), true
+	case uint:
+		return int(number), true
+	case uint8:
+		return int(number), true
+	case uint16:
+		return int(number), true
+	case uint32:
+		return int(number), true
+	case uint64:
+		return int(number), true
+	case float64:
+		return int(number), true
+	default:
+		return 0, false
+	}
+}
+
+func rawPath(raw map[string]any, path ...string) (any, bool) {
+	if len(path) == 0 || raw == nil {
+		return nil, false
+	}
+	var current any = raw
+	for index, key := range path {
+		values, ok := current.(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		value, exists := values[key]
+		if !exists {
+			return nil, false
+		}
+		if index == len(path)-1 {
+			return value, true
+		}
+		current = value
+	}
+	return nil, false
 }
 
 func validate(config Config) (Config, bool, error) {
@@ -219,6 +286,13 @@ func validate(config Config) (Config, bool, error) {
 	}
 	if config.Network.TimeoutSeconds < 1 || config.Network.TimeoutSeconds > 300 {
 		return Config{}, false, fmt.Errorf("network.timeout_seconds 必须在 1 到 300 之间")
+	}
+	if config.Download.Threads == 0 {
+		config.Download.Threads = Default().Download.Threads
+		changed = true
+	}
+	if config.Download.Threads < 1 || config.Download.Threads > 128 {
+		return Config{}, false, fmt.Errorf("download.threads 必须在 1 到 128 之间")
 	}
 	return config, changed, nil
 }

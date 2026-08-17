@@ -78,10 +78,14 @@ func newVideoDownloadCommand(app *App) *cobra.Command {
 				return app.Fail(err, "创建输出目录失败", mode)
 			}
 			fmt.Fprintf(app.Out.Stdout, "输出目录: %s\n", outDir)
+			downloadThreads := app.Config.Download.Threads
+			if downloadThreads < 1 {
+				downloadThreads = media.DefaultDownloadThreads
+			}
 			for _, item := range items {
 				fmt.Fprintf(app.Out.Stdout, "下载%s中...\n", item.label)
 				progress := newDownloadProgressBar(app.Out.Stdout, item.label)
-				bytes, downloadErr := media.DownloadFileWithProgress(ctx, item.url, item.path, app.Logger, progress.Update)
+				bytes, downloadErr := media.DownloadFileWithProgressAndThreads(ctx, item.url, item.path, app.Logger, progress.Update, downloadThreads)
 				progress.Finish()
 				if downloadErr != nil {
 					return app.Fail(downloadErr, "下载"+item.label, mode)

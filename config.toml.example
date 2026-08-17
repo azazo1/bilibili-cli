@@ -1,5 +1,5 @@
 # Bilibili CLI settings.
-version = 1
+version = 2
 
 [output]
 # auto, rich, json, or yaml.
@@ -7,6 +7,10 @@ format = "auto"
 
 [network]
 timeout_seconds = 30
+
+[download]
+# 媒体下载使用的 HTTP Range 并发线程数.
+threads = 8
 
 [safety]
 # Block account write actions and dangerous operations.

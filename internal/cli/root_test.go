@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -296,6 +297,77 @@ func TestConfigInitCreatesDefaultFile(t *testing.T) {
 	}
 	if _, err := os.Stat(app.ConfigStore.File); err != nil {
 		t.Fatalf("config init did not create config file: %v", err)
+	}
+}
+
+func TestConfigStatusReportsMissingConfig(t *testing.T) {
+	app := newTestApp(t)
+	stdout := &bytes.Buffer{}
+	app.Out = &output.Writer{Stdout: stdout, Stderr: &bytes.Buffer{}}
+	root := NewRoot(app)
+	root.SetArgs([]string{"config", "status", "--json"})
+	if err := root.ExecuteContext(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	data := envelope["data"].(map[string]any)
+	if data["status"] != "missing" || data["needs_upgrade"] != true {
+		t.Fatalf("unexpected config status: %#v", data)
+	}
+	if app.ConfigStore.Exists() {
+		t.Fatal("config status created a config file")
+	}
+}
+
+func TestConfigStatusShowsConfigError(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BILI_CONFIG_DIR", dir)
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte("version = 2\n[output]\nformat = \"xml\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	app := NewApp()
+	stdout := &bytes.Buffer{}
+	app.Out = &output.Writer{Stdout: stdout, Stderr: &bytes.Buffer{}}
+	root := NewRoot(app)
+	root.SetArgs([]string{"config", "status", "--json"})
+	if err := root.ExecuteContext(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	data := envelope["data"].(map[string]any)
+	if data["status"] != "error" || data["error"] == "" {
+		t.Fatalf("unexpected config error status: %#v", data)
+	}
+}
+
+func TestConfigUpgradeWritesCurrentFormat(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BILI_CONFIG_DIR", dir)
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte("version = 1\n[safety]\nread_only = true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	app := NewApp()
+	app.Out = &output.Writer{Stdout: io.Discard, Stderr: io.Discard, DefaultMode: "rich"}
+	root := NewRoot(app)
+	root.SetArgs([]string{"config", "upgrade"})
+	if err := root.ExecuteContext(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	if !strings.Contains(text, "version = 2") || !strings.Contains(text, "threads = 8") || !strings.Contains(text, "read_only = true") {
+		t.Fatalf("unexpected upgraded config: %s", text)
 	}
 }
 

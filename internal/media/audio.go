@@ -29,30 +29,49 @@ type DownloadProgress struct {
 type ProgressFunc func(DownloadProgress)
 
 func Download(ctx context.Context, audioURL, outputPath string, logger *slog.Logger) (int64, error) {
-	return download(ctx, audioURL, outputPath, logger, "音频", nil)
+	return DownloadWithThreads(ctx, audioURL, outputPath, logger, DefaultDownloadThreads)
+}
+
+func DownloadWithThreads(ctx context.Context, audioURL, outputPath string, logger *slog.Logger, threads int) (int64, error) {
+	return downloadWithThreads(ctx, audioURL, outputPath, logger, "音频", nil, threads)
 }
 
 func DownloadFile(ctx context.Context, mediaURL, outputPath string, logger *slog.Logger) (int64, error) {
-	return DownloadFileWithProgress(ctx, mediaURL, outputPath, logger, nil)
+	return DownloadFileWithThreads(ctx, mediaURL, outputPath, logger, DefaultDownloadThreads)
 }
 
 func DownloadFileWithProgress(ctx context.Context, mediaURL, outputPath string, logger *slog.Logger, progress ProgressFunc) (int64, error) {
-	return download(ctx, mediaURL, outputPath, logger, "媒体", progress)
+	return DownloadFileWithProgressAndThreads(ctx, mediaURL, outputPath, logger, progress, DefaultDownloadThreads)
+}
+
+func DownloadFileWithThreads(ctx context.Context, mediaURL, outputPath string, logger *slog.Logger, threads int) (int64, error) {
+	return DownloadFileWithProgressAndThreads(ctx, mediaURL, outputPath, logger, nil, threads)
+}
+
+func DownloadFileWithProgressAndThreads(ctx context.Context, mediaURL, outputPath string, logger *slog.Logger, progress ProgressFunc, threads int) (int64, error) {
+	return downloadWithThreads(ctx, mediaURL, outputPath, logger, "媒体", progress, threads)
 }
 
 func download(ctx context.Context, mediaURL, outputPath string, logger *slog.Logger, label string, progress ProgressFunc) (int64, error) {
+	return downloadWithThreads(ctx, mediaURL, outputPath, logger, label, progress, DefaultDownloadThreads)
+}
+
+func downloadWithThreads(ctx context.Context, mediaURL, outputPath string, logger *slog.Logger, label string, progress ProgressFunc, threads int) (int64, error) {
 	if strings.TrimSpace(mediaURL) == "" {
 		return 0, errors.New(label + "地址为空")
 	}
 	if logger == nil {
 		logger = slog.Default()
 	}
+	if threads < 1 {
+		threads = DefaultDownloadThreads
+	}
 	var lastErr error
 	for attempt := 1; attempt <= 3; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return 0, err
 		}
-		if written, err := downloadOnce(ctx, mediaURL, outputPath, logger, label, progress); err == nil {
+		if written, err := downloadOnceWithThreads(ctx, mediaURL, outputPath, logger, label, progress, threads); err == nil {
 			return written, nil
 		} else {
 			lastErr = err
@@ -67,6 +86,17 @@ func download(ctx context.Context, mediaURL, outputPath string, logger *slog.Log
 		}
 	}
 	return 0, fmt.Errorf("%s下载失败: %w", label, lastErr)
+}
+
+func downloadOnceWithThreads(ctx context.Context, mediaURL, outputPath string, logger *slog.Logger, label string, progress ProgressFunc, threads int) (int64, error) {
+	if threads <= 1 {
+		return downloadOnce(ctx, mediaURL, outputPath, logger, label, progress)
+	}
+	written, err := downloadOnceParallel(ctx, mediaURL, outputPath, logger, label, progress, threads)
+	if errors.Is(err, errRangeUnsupported) {
+		return downloadOnce(ctx, mediaURL, outputPath, logger, label, progress)
+	}
+	return written, err
 }
 
 func downloadOnce(ctx context.Context, mediaURL, outputPath string, logger *slog.Logger, label string, progress ProgressFunc) (int64, error) {
