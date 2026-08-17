@@ -166,8 +166,44 @@ func TestVideoSubtitleListsAllTracks(t *testing.T) {
 	subtitles := data["subtitles"].([]any)
 	first := subtitles[0].(map[string]any)
 	second := subtitles[1].(map[string]any)
-	if data["subtitle_count"] != float64(2) || first["line_count"] != float64(2) || second["is_ai"] != true {
+	if data["available_subtitle_count"] != float64(2) || data["subtitle_count"] != float64(2) || first["line_count"] != float64(2) || second["is_ai"] != true {
 		t.Fatalf("unexpected subtitle payload: %#v", data)
+	}
+}
+
+func TestVideoSubtitleFiltersTracks(t *testing.T) {
+	server := newSubtitleTestServer(t)
+	defer server.Close()
+	app := newTestApp(t)
+	app.API.BaseURL = server.URL
+	app.API.HTTP = server.Client()
+	stdout := &bytes.Buffer{}
+	app.Out = &output.Writer{Stdout: stdout, Stderr: &bytes.Buffer{}}
+	root := NewRoot(app)
+	root.SetArgs([]string{"video", "subtitle", "BV1ABcsztEcY", "--language", "zh_CN", "--type", "non-ai", "--json"})
+	if err := root.ExecuteContext(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	data := envelope["data"].(map[string]any)
+	subtitles := data["subtitles"].([]any)
+	item := subtitles[0].(map[string]any)
+	if data["available_subtitle_count"] != float64(2) || data["subtitle_count"] != float64(1) || item["id"] != "11" {
+		t.Fatalf("unexpected filtered subtitle payload: %#v", data)
+	}
+}
+
+func TestFilterSubtitleTracksSupportsIDs(t *testing.T) {
+	tracks := []api.SubtitleTrack{
+		{ID: "11", Language: "zh-CN"},
+		{ID: "12", Language: "en-US", Type: 1},
+	}
+	filtered := filterSubtitleTracks(tracks, []string{"12"}, nil, "ai")
+	if len(filtered) != 1 || filtered[0].ID != "12" {
+		t.Fatalf("unexpected ID filter result: %#v", filtered)
 	}
 }
 
@@ -198,21 +234,25 @@ func TestVideoSubtitleAliasExportsEachTrack(t *testing.T) {
 	}
 }
 
-func TestExportSubtitleFilesWritesSingleSRTPath(t *testing.T) {
-	outputPath := filepath.Join(t.TempDir(), "subtitle.srt")
-	items := []subtitleCommandItem{{
-		Track: api.SubtitleTrack{Language: "zh-CN"},
-		Cues:  []api.SubtitleCue{{From: 0, To: 1, Content: "line"}},
-	}}
+func TestExportSubtitleFilesUsesSRTSuffixForAllTracks(t *testing.T) {
+	outputPath := filepath.Join(t.TempDir(), "subt.srt")
+	items := []subtitleCommandItem{
+		{Track: api.SubtitleTrack{Language: "zh-CN"}, Cues: []api.SubtitleCue{{From: 0, To: 1, Content: "normal"}}},
+		{Track: api.SubtitleTrack{Language: "zh-CN", Type: 1}, Cues: []api.SubtitleCue{{From: 0, To: 1, Content: "ai"}}},
+	}
 	if err := exportSubtitleFiles(outputPath, "BV1ABcsztEcY", items); err != nil {
 		t.Fatal(err)
 	}
-	info, err := os.Stat(outputPath)
-	if err != nil {
-		t.Fatal(err)
+	normalPath := filepath.Join(filepath.Dir(outputPath), "subt-zh_CN.srt")
+	aiPath := filepath.Join(filepath.Dir(outputPath), "subt-zh_CN-ai.srt")
+	for _, path := range []string{normalPath, aiPath} {
+		info, err := os.Stat(path)
+		if err != nil || info.Size() == 0 {
+			t.Fatalf("unexpected suffix subtitle export: %s, %v", path, err)
+		}
 	}
-	if info.Size() == 0 || items[0].OutputPath != outputPath {
-		t.Fatalf("unexpected direct subtitle export: %#v", items)
+	if items[0].OutputPath != normalPath || items[1].OutputPath != aiPath {
+		t.Fatalf("unexpected subtitle output paths: %#v", items)
 	}
 }
 

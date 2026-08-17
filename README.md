@@ -39,10 +39,11 @@ go run ./cmd/bili status --yaml
 
 ```shell
 go run ./cmd/bili video subtitle BV1ABcsztEcY
-go run ./cmd/bili video st BV1ABcsztEcY -o ./subtitles
+go run ./cmd/bili video subtitle BV1ABcsztEcY --language zh_CN --type non-ai
+go run ./cmd/bili video st BV1ABcsztEcY -o ./subtitles/subt.srt
 ```
 
-`bili video subtitle` 会列出播放器接口返回的所有字幕轨道, 包含语言, 字幕类型, AI 标记, 作者和字幕行数. `-o` 接受输出目录, 每条可下载字幕保存为独立的 SRT 文件. 只有一条字幕时, 也可将 `-o` 指向具体的 `.srt` 文件.
+`bili video subtitle` 会列出播放器接口返回的所有字幕轨道, 包含 ID, 语言, 字幕类型, AI 标记, 作者和字幕行数. 可通过 `--id`, `--language` 或 `--type all|ai|non-ai` 筛选轨道. `--language` 使用 API 的 `lan`, 并兼容 `zh-CN` 与 `zh_CN` 两种写法. 当 `-o` 指向 `subt.srt` 时, 每条可下载字幕会写为 `subt-<lan>.srt` 或 `subt-<lan>-ai.srt`.
 
 配置和认证默认保存在 `~/.config/bilibili-cli/config.toml` 与 `~/.config/bilibili-cli/auth.json`. 如需从已有 cookie 导入, 可以传入 `BILI_COOKIE` 或 Netscape cookie 文件路径 `BILI_COOKIE_FILE`.
 
