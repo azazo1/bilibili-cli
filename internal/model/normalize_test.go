@@ -25,10 +25,25 @@ func TestNormalizeUserReadsNavLevelAndMoneyFields(t *testing.T) {
 		"mid":  42,
 		"uname": "owner",
 		"money": 12.5,
+		"wallet": map[string]any{"bcoin_balance": 3},
+		"level_info": map[string]any{"current_level": 6},
+	})
+	if got["level"] != 6 || got["coins"] != 12 || got["bcoins"] != 3 {
+		t.Fatalf("unexpected normalized user: %#v", got)
+	}
+}
+
+func TestNormalizeUserPrefersNestedFieldsOverZeroPlaceholders(t *testing.T) {
+	got := NormalizeUser(map[string]any{
+		"mid":        42,
+		"uname":      "owner",
+		"level":      0,
+		"money":      0,
+		"coins":      12,
 		"level_info": map[string]any{"current_level": 6},
 	})
 	if got["level"] != 6 || got["coins"] != 12 {
-		t.Fatalf("unexpected normalized user: %#v", got)
+		t.Fatalf("unexpected placeholder fallback: %#v", got)
 	}
 }
 

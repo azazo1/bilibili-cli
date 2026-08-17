@@ -92,9 +92,10 @@ func newWhoamiCommand(app *App) *cobra.Command {
 			if err != nil {
 				return app.Fail(err, "获取用户信息失败", mode)
 			}
-			payload := map[string]any{"user": model.NormalizeUser(info), "relation": model.NormalizeRelation(relation)}
+			user := model.NormalizeUser(info)
+			payload := map[string]any{"user": user, "relation": model.NormalizeRelation(relation)}
 			return app.Complete(payload, mode, func(w io.Writer) {
-				fmt.Fprintf(w, "个人信息\n用户: %s (UID: %d)\n等级: %d  硬币: %d\n粉丝: %s  关注: %s\n", stringValue(info["uname"]), uid, intValue(info["level"], 0), intValue(info["coins"], 0), formatCount(relation["follower"]), formatCount(relation["following"]))
+				fmt.Fprintf(w, "个人信息\n用户: %s (UID: %d)\n等级: %d  硬币: %d  B币: %d\n粉丝: %s  关注: %s\n", stringValue(user["name"]), uid, intValue(user["level"], 0), intValue(user["coins"], 0), intValue(user["bcoins"], 0), formatCount(relation["follower"]), formatCount(relation["following"]))
 			})
 		},
 	}
