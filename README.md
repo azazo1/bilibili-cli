@@ -56,7 +56,7 @@ bili video download BV1ABcsztEcY --audio-only
 bili video download BV1ABcsztEcY --video-only
 ```
 
-`bili video download` 默认保存到当前文件夹. DASH 地址会分别保存音频 `.m4a` 和视频 `.mp4`, 原生 `durl` 地址会保存一个 `.mp4`. `--audio-only` 和 `--video-only` 不能同时使用.
+`bili video download` 默认保存到当前文件夹. DASH 地址会分别保存音频 `.m4a` 和视频 `.mp4`, 原生 `durl` 地址会保存一个 `.mp4`. 交互终端会显示下载进度条. `--audio-only` 和 `--video-only` 不能同时使用.
 
 其他命令按领域组织在 `bili me`, `bili user`, `bili video` 和 `bili dynamic` 下. 例如 `bili user video UID_OR_NAME`, `bili user follow UID`, `bili me fav`, `bili video watch` 和 `bili dynamic post TEXT`.
 

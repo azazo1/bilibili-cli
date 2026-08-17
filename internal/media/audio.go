@@ -21,15 +21,26 @@ var downloadHeaders = map[string]string{
 	"Referer":    "https://www.bilibili.com/",
 }
 
+type DownloadProgress struct {
+	Written int64
+	Total   int64
+}
+
+type ProgressFunc func(DownloadProgress)
+
 func Download(ctx context.Context, audioURL, outputPath string, logger *slog.Logger) (int64, error) {
-	return download(ctx, audioURL, outputPath, logger, "音频")
+	return download(ctx, audioURL, outputPath, logger, "音频", nil)
 }
 
 func DownloadFile(ctx context.Context, mediaURL, outputPath string, logger *slog.Logger) (int64, error) {
-	return download(ctx, mediaURL, outputPath, logger, "媒体")
+	return DownloadFileWithProgress(ctx, mediaURL, outputPath, logger, nil)
 }
 
-func download(ctx context.Context, mediaURL, outputPath string, logger *slog.Logger, label string) (int64, error) {
+func DownloadFileWithProgress(ctx context.Context, mediaURL, outputPath string, logger *slog.Logger, progress ProgressFunc) (int64, error) {
+	return download(ctx, mediaURL, outputPath, logger, "媒体", progress)
+}
+
+func download(ctx context.Context, mediaURL, outputPath string, logger *slog.Logger, label string, progress ProgressFunc) (int64, error) {
 	if strings.TrimSpace(mediaURL) == "" {
 		return 0, errors.New(label + "地址为空")
 	}
@@ -41,7 +52,7 @@ func download(ctx context.Context, mediaURL, outputPath string, logger *slog.Log
 		if err := ctx.Err(); err != nil {
 			return 0, err
 		}
-		if written, err := downloadOnce(ctx, mediaURL, outputPath, logger, label); err == nil {
+		if written, err := downloadOnce(ctx, mediaURL, outputPath, logger, label, progress); err == nil {
 			return written, nil
 		} else {
 			lastErr = err
@@ -58,7 +69,7 @@ func download(ctx context.Context, mediaURL, outputPath string, logger *slog.Log
 	return 0, fmt.Errorf("%s下载失败: %w", label, lastErr)
 }
 
-func downloadOnce(ctx context.Context, mediaURL, outputPath string, logger *slog.Logger, label string) (int64, error) {
+func downloadOnce(ctx context.Context, mediaURL, outputPath string, logger *slog.Logger, label string, progress ProgressFunc) (int64, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, mediaURL, nil)
 	if err != nil {
 		return 0, err
@@ -89,6 +100,10 @@ func downloadOnce(ctx context.Context, mediaURL, outputPath string, logger *slog
 	}()
 	var written int64
 	lastReport := time.Now()
+	lastProgress := time.Now()
+	if progress != nil {
+		progress(DownloadProgress{Total: resp.ContentLength})
+	}
 	buffer := make([]byte, 256*1024)
 	for {
 		read, readErr := resp.Body.Read(buffer)
@@ -101,6 +116,10 @@ func downloadOnce(ctx context.Context, mediaURL, outputPath string, logger *slog
 			if written%(1024*1024) < int64(read) || time.Since(lastReport) >= 5*time.Second {
 				logger.Info(label+"下载进度", "bytes", written)
 				lastReport = time.Now()
+			}
+			if progress != nil && (written == resp.ContentLength || time.Since(lastProgress) >= 100*time.Millisecond) {
+				progress(DownloadProgress{Written: written, Total: resp.ContentLength})
+				lastProgress = time.Now()
 			}
 		}
 		if readErr == io.EOF {
@@ -115,6 +134,9 @@ func downloadOnce(ctx context.Context, mediaURL, outputPath string, logger *slog
 	}
 	if err := os.Rename(tmpPath, outputPath); err != nil {
 		return 0, err
+	}
+	if progress != nil {
+		progress(DownloadProgress{Written: written, Total: resp.ContentLength})
 	}
 	return written, nil
 }
