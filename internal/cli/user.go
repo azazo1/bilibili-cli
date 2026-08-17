@@ -104,7 +104,8 @@ func newUserVideosCommand(app *App) *cobra.Command {
 			return app.CompleteTable(payload, mode, asJSON, asYAML, func(w io.Writer) {
 				rows := make([][]string, 0, len(videos))
 				for index, video := range videos {
-					rows = append(rows, []string{fmt.Sprintf("%d", index+1), stringValue(video["bvid"]), stringValue(video["title"]), videoLength(video["length"]), formatCount(video["play"])})
+					normalized := payload[index]
+					rows = append(rows, []string{fmt.Sprintf("%d", index+1), stringValue(video["bvid"]), stringValue(video["title"]), stringValue(normalized["duration"]), formatCount(video["play"])})
 				}
 				if len(rows) == 0 {
 					fmt.Fprintln(w, "该用户暂无视频")
@@ -117,17 +118,4 @@ func newUserVideosCommand(app *App) *cobra.Command {
 	command.Flags().IntVarP(&count, "max", "n", 10, "显示的视频数量")
 	addStructuredFlags(command, &asJSON, &asYAML)
 	return command
-}
-
-func videoLength(value any) string {
-	if raw := stringValue(value); strings.Contains(raw, ":") {
-		return raw
-	}
-	if raw := stringValue(value); raw == "" {
-		return "00:00"
-	}
-	if intValue(value, -1) < 0 {
-		return "00:00"
-	}
-	return formatDuration(value)
 }
