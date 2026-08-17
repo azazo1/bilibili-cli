@@ -25,6 +25,16 @@ func TestExtractBVID(t *testing.T) {
 	}
 }
 
+func TestExtractVideoReferencePage(t *testing.T) {
+	reference, err := ExtractVideoReference("https://www.bilibili.com/video/BV1ABcsztEcY?p=2")
+	if err != nil || reference.BVID != "BV1ABcsztEcY" || reference.Page != 2 || !reference.PageSpecified {
+		t.Fatalf("unexpected video reference: %#v, %v", reference, err)
+	}
+	if _, err := ExtractVideoReference("https://www.bilibili.com/video/BV1ABcsztEcY?p=0"); CodeOf(err) != CodeInvalidInput {
+		t.Fatalf("invalid page error code = %q", CodeOf(err))
+	}
+}
+
 func TestFormatSubtitleSRT(t *testing.T) {
 	cues := []SubtitleCue{
 		{From: 0.0, To: 2.5, Content: "first"},

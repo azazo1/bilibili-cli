@@ -11,6 +11,16 @@ type VideoDownloadURLs struct {
 	AudioURL    string
 	VideoURL    string
 	CombinedURL string
+	Page        int
+	PageCount   int
+	PartTitle   string
+	Pages       []VideoPage
+}
+
+type VideoPage struct {
+	Page  int
+	CID   int64
+	Title string
 }
 
 func (c *Client) GetVideoURL(ctx context.Context, bvid string, cred *Credential) (string, error) {
@@ -28,14 +38,34 @@ func (c *Client) GetVideoURL(ctx context.Context, bvid string, cred *Credential)
 }
 
 func (c *Client) GetVideoDownloadURLs(ctx context.Context, bvid string, cred *Credential) (VideoDownloadURLs, error) {
-	pages, err := c.getVideoPages(ctx, bvid, cred)
+	return c.GetVideoDownloadURLsForPage(ctx, bvid, 1, cred)
+}
+
+func (c *Client) GetVideoPages(ctx context.Context, bvid string, cred *Credential) ([]VideoPage, error) {
+	rawPages, err := c.getVideoPages(ctx, bvid, cred)
+	if err != nil {
+		return nil, err
+	}
+	pages := normalizeVideoPages(rawPages)
+	if len(pages) == 0 {
+		return nil, NewError(CodeNotFound, "获取下载地址", "视频没有可用分P")
+	}
+	return pages, nil
+}
+
+func (c *Client) GetVideoDownloadURLsForPage(ctx context.Context, bvid string, page int, cred *Credential) (VideoDownloadURLs, error) {
+	if page < 1 {
+		return VideoDownloadURLs{}, NewError(CodeInvalidInput, "获取下载地址", "分P序号必须大于 0")
+	}
+	pages, err := c.GetVideoPages(ctx, bvid, cred)
 	if err != nil {
 		return VideoDownloadURLs{}, err
 	}
-	if len(pages) == 0 {
-		return VideoDownloadURLs{}, NewError(CodeNotFound, "获取下载地址", "视频没有可用分P")
+	if page > len(pages) {
+		return VideoDownloadURLs{}, NewError(CodeNotFound, "获取下载地址", "分P序号超出范围")
 	}
-	cid := int64Value(pages[0]["cid"], 0)
+	selectedPage := pages[page-1]
+	cid := selectedPage.CID
 	if cid == 0 {
 		return VideoDownloadURLs{}, NewError(CodeUpstream, "获取下载地址", "视频分P信息缺少 cid")
 	}
@@ -47,7 +77,27 @@ func (c *Client) GetVideoDownloadURLs(ctx context.Context, bvid string, cred *Cr
 	if urls.AudioURL == "" && urls.VideoURL == "" && urls.CombinedURL == "" {
 		return VideoDownloadURLs{}, NewError(CodeNotFound, "获取下载地址", "无法获取音视频流")
 	}
+	urls.Page = page
+	urls.PageCount = len(pages)
+	urls.PartTitle = selectedPage.Title
+	urls.Pages = pages
 	return urls, nil
+}
+
+func normalizeVideoPages(items []map[string]any) []VideoPage {
+	pages := make([]VideoPage, 0, len(items))
+	for index, item := range items {
+		page := intValue(item["page"], index+1)
+		if page < 1 {
+			page = index + 1
+		}
+		title := stringValue(item["part"])
+		if title == "" {
+			title = stringValue(item["title"])
+		}
+		pages = append(pages, VideoPage{Page: page, CID: int64Value(item["cid"], 0), Title: title})
+	}
+	return pages
 }
 
 func (c *Client) getPlayURLData(ctx context.Context, bvid string, cid int64, cred *Credential) (map[string]any, error) {

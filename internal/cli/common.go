@@ -30,6 +30,14 @@ func (a *App) extractBVID(command *cobra.Command, value string, mode output.Mode
 	return bvid, nil
 }
 
+func (a *App) extractVideoReference(command *cobra.Command, value string, mode output.Mode) (api.VideoReference, error) {
+	reference, err := api.ExtractVideoReference(value)
+	if err != nil {
+		return api.VideoReference{}, a.failUsageWithMode(command, err, "", commandOutputMode(command, a))
+	}
+	return reference, nil
+}
+
 func (a *App) apiFailure(err error, action string, mode output.Mode) error {
 	return a.Fail(err, action, mode)
 }

@@ -6,15 +6,45 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 )
 
 var bvidPattern = regexp.MustCompile(`\bBV[0-9A-Za-z]{10}\b`)
+
+type VideoReference struct {
+	BVID          string
+	Page          int
+	PageSpecified bool
+}
 
 func ExtractBVID(value string) (string, error) {
 	if match := bvidPattern.FindString(value); match != "" {
 		return match, nil
 	}
 	return "", NewError(CodeInvalidInput, "", fmt.Sprintf("无法提取 BV 号: %s", value))
+}
+
+func ExtractVideoReference(value string) (VideoReference, error) {
+	bvid, err := ExtractBVID(value)
+	if err != nil {
+		return VideoReference{}, err
+	}
+	reference := VideoReference{BVID: bvid, Page: 1}
+	parsed, parseErr := url.Parse(value)
+	if parseErr != nil {
+		return reference, nil
+	}
+	rawPage := parsed.Query().Get("p")
+	if rawPage == "" {
+		return reference, nil
+	}
+	page, pageErr := strconv.Atoi(rawPage)
+	if pageErr != nil || page < 1 {
+		return VideoReference{}, NewError(CodeInvalidInput, "", "URL 中的 p 必须是正整数")
+	}
+	reference.Page = page
+	reference.PageSpecified = true
+	return reference, nil
 }
 
 func (c *Client) GetVideoInfo(ctx context.Context, bvid string, cred *Credential) (map[string]any, error) {

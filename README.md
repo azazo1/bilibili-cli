@@ -52,11 +52,15 @@ go run ./cmd/bili video st BV1ABcsztEcY -o ./subtitles/subt.srt
 ```shell
 bili video download BV1ABcsztEcY
 bili video download BV1ABcsztEcY -o ./downloads
+bili video download "https://www.bilibili.com/video/BV1ABcsztEcY?p=2"
 bili video download BV1ABcsztEcY --audio-only
 bili video download BV1ABcsztEcY --video-only
+bili video download BV1ABcsztEcY --no-merge
 ```
 
-`bili video download` 默认保存到当前文件夹. DASH 地址会分别保存音频 `.m4a` 和视频 `.mp4`, 原生 `durl` 地址会保存一个 `.mp4`. 交互终端会显示下载进度条. `--audio-only` 和 `--video-only` 不能同时使用.
+`bili video download` 默认保存到当前文件夹. DASH 地址会分别保存 `<标题>_audio.m4a` 和 `<标题>_video.m4a`, 然后尝试使用 `ffmpeg -c copy` 生成 `<标题>.mp4`. `--no-merge` 可保留两个流而不合并. 原生 `durl` 地址会直接保存一个 `.mp4`.
+
+多分P视频必须在 URL 中指定 `?p=N`. 未指定时会列出所有分P及其标题, 不会下载第一P. 文件名会包含 `P` 序号和该分P的标题. 交互终端会显示下载进度条. `--audio-only` 和 `--video-only` 不能同时使用.
 
 其他命令按领域组织在 `bili me`, `bili user`, `bili video` 和 `bili dynamic` 下. 例如 `bili user video UID_OR_NAME`, `bili user follow UID`, `bili me fav`, `bili video watch` 和 `bili dynamic post TEXT`.
 

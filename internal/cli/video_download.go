@@ -16,13 +16,14 @@ import (
 
 type videoDownloadItem struct {
 	label string
+	stream string
 	url   string
 	path  string
 }
 
 func newVideoDownloadCommand(app *App) *cobra.Command {
 	var outputDir string
-	var audioOnly, videoOnly bool
+	var audioOnly, videoOnly, noMerge bool
 	command := &cobra.Command{
 		Use:   "download BV_OR_URL",
 		Short: "下载视频音频和视频",
@@ -32,31 +33,44 @@ func newVideoDownloadCommand(app *App) *cobra.Command {
 			if audioOnly && videoOnly {
 				return app.invalidInput(cmd, "--audio-only 和 --video-only 不能同时使用", mode)
 			}
-			bvid, err := app.extractBVID(cmd, args[0], mode)
+			reference, err := app.extractVideoReference(cmd, args[0], mode)
 			if err != nil {
 				return err
 			}
 			ctx := contextOrBackground(cmd.Context())
 			credential := app.OptionalCredential(ctx)
-			info, fetchErr := app.API.GetVideoInfo(ctx, bvid, credential)
+			if !reference.PageSpecified {
+				pages, pagesErr := app.API.GetVideoPages(ctx, reference.BVID, credential)
+				if pagesErr != nil {
+					return app.apiFailure(pagesErr, "获取视频分P", mode)
+				}
+				if len(pages) > 1 {
+					return reportVideoPages(app, reference.BVID, pages, mode)
+				}
+			}
+			info, fetchErr := app.API.GetVideoInfo(ctx, reference.BVID, credential)
 			if fetchErr != nil {
 				return app.apiFailure(fetchErr, "获取视频信息", mode)
 			}
 			title := stringValue(info["title"])
 			if title == "" {
-				title = bvid
+				title = reference.BVID
 			}
 			fmt.Fprintf(app.Out.Stdout, "%s (%s)\n", title, formatDuration(info["duration"]))
 			fmt.Fprintln(app.Out.Stdout, "获取下载地址...")
-			urls, fetchErr := app.API.GetVideoDownloadURLs(ctx, bvid, credential)
+			urls, fetchErr := app.API.GetVideoDownloadURLsForPage(ctx, reference.BVID, reference.Page, credential)
 			if fetchErr != nil {
 				return app.apiFailure(fetchErr, "获取下载地址", mode)
+			}
+			if strings.TrimSpace(urls.PartTitle) != "" {
+				fmt.Fprintf(app.Out.Stdout, "分P P%d: %s\n", urls.Page, urls.PartTitle)
 			}
 			outDir := "."
 			if outputDir != "" {
 				outDir = expandHome(outputDir)
 			}
-			items, planErr := makeVideoDownloadItems(urls, title, outDir, audioOnly, videoOnly)
+			fileTitle := videoDownloadFileTitle(title, urls.Page, urls.PageCount, urls.PartTitle)
+			items, planErr := makeVideoDownloadItems(urls, fileTitle, outDir, audioOnly, videoOnly)
 			if planErr != nil {
 				return app.Fail(planErr, "准备下载", mode)
 			}
@@ -74,12 +88,26 @@ func newVideoDownloadCommand(app *App) *cobra.Command {
 				}
 				fmt.Fprintf(app.Out.Stdout, "%s已保存: %s (%.1f MB)\n", item.label, item.path, float64(bytes)/(1024*1024))
 			}
+			if !noMerge {
+				audioPath, videoPath := separateStreamPaths(items)
+				if audioPath != "" && videoPath != "" {
+					mergedPath := filepath.Join(outDir, sanitizeFileName(fileTitle)+".mp4")
+					fmt.Fprintln(app.Out.Stdout, "合并音视频中...")
+					if mergeErr := media.MergeStreams(ctx, audioPath, videoPath, mergedPath, app.Logger); mergeErr != nil {
+						app.Logger.Warn("合并音视频失败, 保留原始流", "error", mergeErr)
+						fmt.Fprintf(app.Out.Stdout, "合并失败, 已保留原始文件: %s, %s\n", audioPath, videoPath)
+					} else {
+						fmt.Fprintf(app.Out.Stdout, "合并完成: %s\n", mergedPath)
+					}
+				}
+			}
 			return nil
 		},
 	}
 	command.Flags().StringVarP(&outputDir, "output", "o", "", "输出目录, 默认当前文件夹")
 	command.Flags().BoolVar(&audioOnly, "audio-only", false, "仅下载音频")
 	command.Flags().BoolVar(&videoOnly, "video-only", false, "仅下载视频")
+	command.Flags().BoolVar(&noMerge, "no-merge", false, "不尝试合并音频和视频")
 	return command
 }
 
@@ -88,13 +116,14 @@ func makeVideoDownloadItems(urls api.VideoDownloadURLs, title, outputDir string,
 		return nil, api.NewError(api.CodeInvalidInput, "", "--audio-only 和 --video-only 不能同时使用")
 	}
 	safeTitle := sanitizeFileName(title)
-	audioPath := filepath.Join(outputDir, safeTitle+".m4a")
-	videoPath := filepath.Join(outputDir, safeTitle+".mp4")
+	audioPath := filepath.Join(outputDir, safeTitle+"_audio.m4a")
+	videoPath := filepath.Join(outputDir, safeTitle+"_video.m4a")
+	combinedPath := filepath.Join(outputDir, safeTitle+".mp4")
 	if audioOnly {
 		if urls.AudioURL == "" {
 			return nil, api.NewError(api.CodeNotFound, "", "无法获取音频流")
 		}
-		return []videoDownloadItem{{label: "音频", url: urls.AudioURL, path: audioPath}}, nil
+		return []videoDownloadItem{{label: "音频", stream: "audio", url: urls.AudioURL, path: audioPath}}, nil
 	}
 	if videoOnly {
 		videoURL := urls.VideoURL
@@ -104,24 +133,74 @@ func makeVideoDownloadItems(urls api.VideoDownloadURLs, title, outputDir string,
 		if videoURL == "" {
 			return nil, api.NewError(api.CodeNotFound, "", "无法获取视频流")
 		}
-		return []videoDownloadItem{{label: "视频", url: videoURL, path: videoPath}}, nil
+		path := videoPath
+		stream := "video"
+		if urls.VideoURL == "" {
+			path = combinedPath
+			stream = "combined"
+		}
+		return []videoDownloadItem{{label: "视频", stream: stream, url: videoURL, path: path}}, nil
 	}
 	if urls.AudioURL != "" && urls.VideoURL != "" {
 		return []videoDownloadItem{
-			{label: "音频", url: urls.AudioURL, path: audioPath},
-			{label: "视频", url: urls.VideoURL, path: videoPath},
+			{label: "音频", stream: "audio", url: urls.AudioURL, path: audioPath},
+			{label: "视频", stream: "video", url: urls.VideoURL, path: videoPath},
 		}, nil
 	}
 	if urls.CombinedURL != "" {
-		return []videoDownloadItem{{label: "视频", url: urls.CombinedURL, path: videoPath}}, nil
+		return []videoDownloadItem{{label: "视频", stream: "combined", url: urls.CombinedURL, path: combinedPath}}, nil
 	}
 	if urls.AudioURL != "" {
-		return []videoDownloadItem{{label: "音频", url: urls.AudioURL, path: audioPath}}, nil
+		return []videoDownloadItem{{label: "音频", stream: "audio", url: urls.AudioURL, path: audioPath}}, nil
 	}
 	if urls.VideoURL != "" {
-		return []videoDownloadItem{{label: "视频", url: urls.VideoURL, path: videoPath}}, nil
+		return []videoDownloadItem{{label: "视频", stream: "video", url: urls.VideoURL, path: videoPath}}, nil
 	}
 	return nil, api.NewError(api.CodeNotFound, "", "无法获取音视频流")
+}
+
+func separateStreamPaths(items []videoDownloadItem) (audioPath, videoPath string) {
+	for _, item := range items {
+		switch item.stream {
+		case "audio":
+			audioPath = item.path
+		case "video":
+			videoPath = item.path
+		}
+	}
+	return audioPath, videoPath
+}
+
+func reportVideoPages(app *App, bvid string, pages []api.VideoPage, mode output.Mode) error {
+	fmt.Fprintln(app.Out.Stdout, "该视频包含多个分P, 请先选择要下载的分P:")
+	for _, page := range pages {
+		title := page.Title
+		if strings.TrimSpace(title) == "" {
+			title = "未命名"
+		}
+		fmt.Fprintf(app.Out.Stdout, "  P%d: %s\n", page.Page, title)
+	}
+	fmt.Fprintf(app.Out.Stdout, "示例: bili video download %s?p=2\n", bvid)
+	return app.Fail(api.NewError(api.CodeInvalidInput, "", "多分P视频必须通过 URL 的 p 参数指定分P"), "选择分P", mode)
+}
+
+func videoDownloadFileTitle(title string, page, pageCount int, partTitle string) string {
+	baseTitle := sanitizeFileName(title)
+	parts := []string{}
+	if pageCount > 1 && page > 0 {
+		parts = append(parts, fmt.Sprintf("P%02d", page))
+	}
+	if strings.TrimSpace(partTitle) != "" && strings.TrimSpace(partTitle) != strings.TrimSpace(title) {
+		parts = append(parts, sanitizeFileName(partTitle))
+	}
+	if len(parts) == 0 {
+		return baseTitle
+	}
+	suffix := "_" + strings.Join(parts, "_")
+	if len([]rune(suffix)) >= 120 {
+		return truncate(strings.TrimPrefix(suffix, "_"), 120)
+	}
+	return truncate(baseTitle, 120-len([]rune(suffix))) + suffix
 }
 
 var unsafeFileName = regexp.MustCompile(`[<>:"/\\|?*]`)
