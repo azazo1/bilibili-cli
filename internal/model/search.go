@@ -115,21 +115,7 @@ func NormalizeSearchLive(item map[string]any) map[string]any {
 	}
 }
 
-func searchPublishedAt(item map[string]any) string {
-	for _, key := range []string{"pubdate", "pub_time", "publish_time", "senddate", "ctime", "pubtime", "live_time"} {
-		value := item[key]
-		if value == nil {
-			continue
-		}
-		if timestamp := ToInt64(value, 0); timestamp > 0 {
-			return TimestampISO(timestamp)
-		}
-		if text := strings.TrimSpace(String(value)); text != "" && text != "0" {
-			return text
-		}
-	}
-	return ""
-}
+func searchPublishedAt(item map[string]any) string { return PublishedAt(item) }
 
 func normalizeSearchURL(value string) string {
 	value = strings.TrimSpace(value)

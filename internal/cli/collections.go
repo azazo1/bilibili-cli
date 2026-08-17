@@ -75,13 +75,23 @@ func newFavoritesCommand(app *App) *cobra.Command {
 				items = append(items, model.NormalizeFavoriteMedia(item))
 			}
 			payload := map[string]any{"folder_id": favID, "page": page, "has_more": boolValue(data["has_more"]), "items": items}
+			includePublishedAt := hasPublishedAt(items)
 			return app.CompleteTable(payload, mode, asJSON, asYAML, func(w io.Writer) {
-				rows := make([][]string, 0, len(medias))
-				for index, item := range medias {
+				rows := make([][]string, 0, len(items))
+				for index, item := range items {
 					upper := mapValue(item["upper"])
-					rows = append(rows, []string{fmt.Sprintf("%d", index+1+(page-1)*20), stringValue(item["bvid"]), stringValue(item["title"]), stringValue(upper["name"]), formatDuration(item["duration"])})
+					row := []string{fmt.Sprintf("%d", index+1+(page-1)*20), stringValue(item["bvid"]), stringValue(item["title"]), stringValue(upper["name"])}
+					if includePublishedAt {
+						row = append(row, publishedTime(item))
+					}
+					rows = append(rows, append(row, stringValue(item["duration"])))
 				}
-				app.renderTable(w, fmt.Sprintf("收藏夹 #%d (第 %d 页)", favID, page), []string{"#", "BV号", "标题", "UP主", "时长"}, rows)
+				headers := []string{"#", "BV号", "标题", "UP主"}
+				if includePublishedAt {
+					headers = append(headers, "发布时间")
+				}
+				headers = append(headers, "时长")
+				app.renderTable(w, fmt.Sprintf("收藏夹 #%d (第 %d 页)", favID, page), headers, rows)
 				if boolValue(data["has_more"]) {
 					fmt.Fprintf(w, "还有更多内容, 使用 bili me fav %d --page %d 查看下一页\n", favID, page+1)
 				}
@@ -173,15 +183,25 @@ func newHistoryCommand(app *App) *cobra.Command {
 				normalized = append(normalized, model.NormalizeHistoryItem(item))
 			}
 			payload := map[string]any{"page": page, "count": len(normalized), "items": normalized}
+			includePublishedAt := hasPublishedAt(normalized)
 			return app.CompleteTable(payload, mode, asJSON, asYAML, func(w io.Writer) {
 				rows := make([][]string, 0, len(items))
 				for index, item := range items {
 					historyInfo := mapValue(item["history"])
 					owner := mapValue(item["owner"])
 					viewAt := int64Value(firstNonNil(historyInfo["view_at"], item["view_at"]), 0)
-					rows = append(rows, []string{fmt.Sprintf("%d", index+1), firstString(historyInfo["bvid"], item["bvid"], historyInfo["oid"]), firstString(item["title"], item["name"]), firstString(owner["name"], item["author_name"], item["author"]), timestampDisplay(viewAt)})
+					row := []string{fmt.Sprintf("%d", index+1), firstString(historyInfo["bvid"], item["bvid"], historyInfo["oid"]), firstString(item["title"], item["name"]), firstString(owner["name"], item["author_name"], item["author"])}
+					if includePublishedAt {
+						row = append(row, publishedTime(normalized[index]))
+					}
+					rows = append(rows, append(row, timestampDisplay(viewAt)))
 				}
-				app.renderTable(w, fmt.Sprintf("观看历史 (第 %d 页)", page), []string{"#", "标识", "标题", "UP主", "观看时间"}, rows)
+				headers := []string{"#", "标识", "标题", "UP主"}
+				if includePublishedAt {
+					headers = append(headers, "发布时间")
+				}
+				headers = append(headers, "观看时间")
+				app.renderTable(w, fmt.Sprintf("观看历史 (第 %d 页)", page), headers, rows)
 			})
 		},
 	}
@@ -216,13 +236,24 @@ func newWatchLaterCommand(app *App) *cobra.Command {
 				normalized = append(normalized, model.NormalizeWatchLaterItem(item))
 			}
 			payload := map[string]any{"count": intValue(data["count"], len(items)), "items": normalized}
+			visible := normalized[:min(len(normalized), 30)]
+			includePublishedAt := hasPublishedAt(visible)
 			return app.CompleteTable(payload, mode, asJSON, asYAML, func(w io.Writer) {
-				rows := make([][]string, 0, min(len(items), 30))
-				for index, item := range items[:min(len(items), 30)] {
+				rows := make([][]string, 0, len(visible))
+				for index, item := range items[:len(visible)] {
 					owner := mapValue(item["owner"])
-					rows = append(rows, []string{fmt.Sprintf("%d", index+1), stringValue(item["bvid"]), stringValue(item["title"]), stringValue(owner["name"]), formatDuration(item["duration"])})
+					row := []string{fmt.Sprintf("%d", index+1), stringValue(item["bvid"]), stringValue(item["title"]), stringValue(owner["name"])}
+					if includePublishedAt {
+						row = append(row, publishedTime(visible[index]))
+					}
+					rows = append(rows, append(row, formatDuration(item["duration"])))
 				}
-				app.renderTable(w, fmt.Sprintf("稍后再看 (共 %d 个)", intValue(data["count"], len(items))), []string{"#", "BV号", "标题", "UP主", "时长"}, rows)
+				headers := []string{"#", "BV号", "标题", "UP主"}
+				if includePublishedAt {
+					headers = append(headers, "发布时间")
+				}
+				headers = append(headers, "时长")
+				app.renderTable(w, fmt.Sprintf("稍后再看 (共 %d 个)", intValue(data["count"], len(items))), headers, rows)
 			})
 		},
 	}

@@ -22,7 +22,7 @@ func TestUserVideosTableUsesAppDuration(t *testing.T) {
 		case "/x/internal/gaia-gateway/ExClimbWuzhi":
 			fmt.Fprint(w, `{"code":0}`)
 		case "/x/v2/space/archive/cursor":
-			fmt.Fprint(w, `{"code":0,"data":{"item":[{"bvid":"BV1duration","title":"demo","duration":125,"play":9}]}}`)
+			fmt.Fprint(w, `{"code":0,"data":{"item":[{"bvid":"BV1duration","title":"demo","duration":125,"play":9,"publish_time_text":"2024-01-02 03:04"}]}}`)
 		default:
 			t.Fatalf("unexpected request path: %s", r.URL.Path)
 		}
@@ -45,7 +45,17 @@ func TestUserVideosTableUsesAppDuration(t *testing.T) {
 	if err := root.ExecuteContext(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(stdout.String(), "\t02:05\t") {
-		t.Fatalf("duration was not rendered from app response: %q", stdout.String())
+	result := stdout.String()
+	if !strings.Contains(result, "\t发布时间\t") || !strings.Contains(result, "\t2024-01-02 03:04\t02:05\t") {
+		t.Fatalf("duration or published time was not rendered from app response: %q", result)
+	}
+}
+
+func TestHasPublishedAtRequiresSourceField(t *testing.T) {
+	if hasPublishedAt([]map[string]any{{"published_at": ""}}) {
+		t.Fatal("empty published_at enabled the column")
+	}
+	if !hasPublishedAt([]map[string]any{{"published_at": "2024-01-02T03:04:05+08:00"}}) {
+		t.Fatal("published_at did not enable the column")
 	}
 }

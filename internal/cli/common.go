@@ -5,6 +5,7 @@ import (
 	"io"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -51,6 +52,26 @@ func truncate(value string, max int) string {
 
 func formatDuration(value any) string { return model.FormatDuration(value) }
 func formatCount(value any) string    { return model.FormatCount(value) }
+
+func hasPublishedAt(items []map[string]any) bool {
+	for _, item := range items {
+		if strings.TrimSpace(stringValue(item["published_at"])) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func publishedTime(item map[string]any) string {
+	value := strings.TrimSpace(stringValue(item["published_at"]))
+	if value == "" {
+		return "-"
+	}
+	if parsed, err := time.Parse(time.RFC3339, value); err == nil {
+		return parsed.Local().Format("2006-01-02 15:04")
+	}
+	return value
+}
 
 func firstMapList(value any) []map[string]any { return model.Maps(value) }
 

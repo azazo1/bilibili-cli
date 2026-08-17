@@ -101,17 +101,27 @@ func newUserVideosCommand(app *App) *cobra.Command {
 			for _, video := range videos {
 				payload = append(payload, model.NormalizeVideoSummary(video))
 			}
+			includePublishedAt := hasPublishedAt(payload)
 			return app.CompleteTable(payload, mode, asJSON, asYAML, func(w io.Writer) {
 				rows := make([][]string, 0, len(videos))
 				for index, video := range videos {
 					normalized := payload[index]
-					rows = append(rows, []string{fmt.Sprintf("%d", index+1), stringValue(video["bvid"]), stringValue(video["title"]), stringValue(normalized["duration"]), formatCount(video["play"])})
+					row := []string{fmt.Sprintf("%d", index+1), stringValue(video["bvid"]), stringValue(video["title"])}
+					if includePublishedAt {
+						row = append(row, publishedTime(normalized))
+					}
+					rows = append(rows, append(row, stringValue(normalized["duration"]), formatCount(video["play"])))
 				}
 				if len(rows) == 0 {
 					fmt.Fprintln(w, "该用户暂无视频")
 					return
 				}
-				app.renderTable(w, fmt.Sprintf("最新 %d 个视频", len(rows)), []string{"#", "BV号", "标题", "时长", "播放"}, rows)
+				headers := []string{"#", "BV号", "标题"}
+				if includePublishedAt {
+					headers = append(headers, "发布时间")
+				}
+				headers = append(headers, "时长", "播放")
+				app.renderTable(w, fmt.Sprintf("最新 %d 个视频", len(rows)), headers, rows)
 			})
 		},
 	}

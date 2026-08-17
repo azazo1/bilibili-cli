@@ -20,6 +20,17 @@ func TestNormalizeVideoSummary(t *testing.T) {
 	}
 }
 
+func TestNormalizeVideoSummaryReadsCreatedTime(t *testing.T) {
+	got := NormalizeVideoSummary(map[string]any{
+		"bvid":    "BV1created",
+		"title":   "video",
+		"created": 1700000000,
+	})
+	if got["published_at"] == "" {
+		t.Fatalf("published_at is missing: %#v", got)
+	}
+}
+
 func TestNormalizeUserReadsNavLevelAndMoneyFields(t *testing.T) {
 	got := NormalizeUser(map[string]any{
 		"mid":  42,

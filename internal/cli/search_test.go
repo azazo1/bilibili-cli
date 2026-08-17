@@ -77,9 +77,20 @@ func TestSearchRowsIncludePublishedColumn(t *testing.T) {
 		if !ok {
 			t.Fatalf("ParseSearchType(%q) failed", kind)
 		}
-		headers := searchHeaders(parsed)
+		headers := searchHeaders(parsed, true)
 		if !strings.Contains(strings.Join(headers, "|"), "发布时间") {
 			t.Fatalf("headers missing published column: %#v", headers)
 		}
+	}
+}
+
+func TestUserSearchRowsOmitPublishedColumnWithoutSourceField(t *testing.T) {
+	headers := searchHeaders(api.SearchTypeUser, false)
+	if strings.Contains(strings.Join(headers, "|"), "发布时间") {
+		t.Fatalf("unexpected headers: %#v", headers)
+	}
+	rows := searchRows(api.SearchTypeUser, []map[string]any{{"uid": "42", "name": "user"}}, false)
+	if len(rows) != 1 || len(rows[0]) != len(headers) {
+		t.Fatalf("rows do not match headers: headers=%#v rows=%#v", headers, rows)
 	}
 }

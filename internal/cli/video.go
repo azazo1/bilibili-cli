@@ -81,14 +81,26 @@ func newVideoCommand(app *App) *cobra.Command {
 						fmt.Fprintf(w, "%s (赞 %s)\n%s\n", stringValue(member["uname"]), formatCount(item["like"]), truncate(stringValue(content["message"]), 120))
 					}
 				}
-				if related && len(relatedItems) > 0 {
-					rows := make([][]string, 0, min(len(relatedItems), 10))
-					for index, item := range relatedItems[:min(len(relatedItems), 10)] {
+				normalizedRelated := firstMapList(payload["related"])
+				if related && len(normalizedRelated) > 0 {
+					visible := normalizedRelated[:min(len(normalizedRelated), 10)]
+					includePublishedAt := hasPublishedAt(visible)
+					rows := make([][]string, 0, len(visible))
+					for index, item := range visible {
 						owner := mapValue(item["owner"])
-						stat := mapValue(item["stat"])
-						rows = append(rows, []string{fmt.Sprintf("%d", index+1), stringValue(item["bvid"]), stringValue(item["title"]), stringValue(owner["name"]), formatCount(stat["view"])})
+						stats := mapValue(item["stats"])
+						row := []string{fmt.Sprintf("%d", index+1), stringValue(item["bvid"]), stringValue(item["title"]), stringValue(owner["name"])}
+						if includePublishedAt {
+							row = append(row, publishedTime(item))
+						}
+						rows = append(rows, append(row, formatCount(stats["view"])))
 					}
-					app.renderTable(w, "\n相关推荐", []string{"#", "BV号", "标题", "UP主", "播放"}, rows)
+					headers := []string{"#", "BV号", "标题", "UP主"}
+					if includePublishedAt {
+						headers = append(headers, "发布时间")
+					}
+					headers = append(headers, "播放")
+					app.renderTable(w, "\n相关推荐", headers, rows)
 				}
 			})
 		},

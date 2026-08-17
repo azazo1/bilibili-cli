@@ -3,8 +3,6 @@ package cli
 import (
 	"fmt"
 	"io"
-	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 
@@ -51,8 +49,9 @@ func newSearchCommand(app *App) *cobra.Command {
 			for _, item := range results {
 				payload = append(payload, model.NormalizeSearchResult(string(kind), item))
 			}
+			includePublishedAt := kind == api.SearchTypeVideo || kind == api.SearchTypeArticle
 			return app.CompleteTable(payload, mode, asJSON, asYAML, func(w io.Writer) {
-				app.renderTable(w, searchTitle(kind, order, args[0]), searchHeaders(kind), searchRows(kind, payload))
+				app.renderTable(w, searchTitle(kind, order, args[0]), searchHeaders(kind, includePublishedAt), searchRows(kind, payload, includePublishedAt))
 			})
 		},
 	}
@@ -68,52 +67,89 @@ func searchTitle(kind api.SearchType, order api.SearchOrder, keyword string) str
 	return fmt.Sprintf("%s搜索: %s (%s)", kind.Label(), keyword, order.Label())
 }
 
-func searchHeaders(kind api.SearchType) []string {
+func searchHeaders(kind api.SearchType, includePublishedAt bool) []string {
 	switch kind {
 	case api.SearchTypeArticle:
-		return []string{"#", "ID", "标题", "作者", "浏览", "点赞", "评论", "发布时间"}
+		headers := []string{"#", "ID", "标题", "作者", "浏览", "点赞", "评论"}
+		if includePublishedAt {
+			headers = append(headers, "发布时间")
+		}
+		return headers
 	case api.SearchTypeVideo:
-		return []string{"#", "BV号", "标题", "UP主", "播放", "弹幕", "收藏", "发布时间", "时长"}
+		headers := []string{"#", "BV号", "标题", "UP主", "播放", "弹幕", "收藏"}
+		if includePublishedAt {
+			headers = append(headers, "发布时间")
+		}
+		return append(headers, "时长")
 	case api.SearchTypeUser:
-		return []string{"#", "UID", "用户名", "粉丝", "视频数", "签名", "发布时间"}
+		headers := []string{"#", "UID", "用户名", "粉丝", "视频数", "签名"}
+		if includePublishedAt {
+			headers = append(headers, "发布时间")
+		}
+		return headers
 	case api.SearchTypeBangumi, api.SearchTypeMedia:
-		return []string{"#", "ID", "标题", "地区", "评分", "发布时间", "进度"}
+		headers := []string{"#", "ID", "标题", "地区", "评分"}
+		if includePublishedAt {
+			headers = append(headers, "发布时间")
+		}
+		return append(headers, "进度")
 	case api.SearchTypeLive:
-		return []string{"#", "房间ID", "标题", "主播", "在线", "分区", "发布时间"}
+		headers := []string{"#", "房间ID", "标题", "主播", "在线", "分区"}
+		if includePublishedAt {
+			headers = append(headers, "发布时间")
+		}
+		return headers
 	default:
-		return []string{"#", "ID", "标题", "作者", "发布时间"}
+		headers := []string{"#", "ID", "标题", "作者"}
+		if includePublishedAt {
+			headers = append(headers, "发布时间")
+		}
+		return headers
 	}
 }
 
-func searchRows(kind api.SearchType, items []map[string]any) [][]string {
+func searchRows(kind api.SearchType, items []map[string]any, includePublishedAt bool) [][]string {
 	rows := make([][]string, 0, len(items))
 	for index, item := range items {
 		prefix := fmt.Sprintf("%d", index+1)
 		switch kind {
 		case api.SearchTypeArticle:
-			rows = append(rows, []string{prefix, stringValue(item["id"]), stringValue(item["title"]), stringValue(item["author"]), formatCount(item["view"]), formatCount(item["like"]), formatCount(item["reply"]), searchPublishedTime(item)})
+			row := []string{prefix, stringValue(item["id"]), stringValue(item["title"]), stringValue(item["author"]), formatCount(item["view"]), formatCount(item["like"]), formatCount(item["reply"])}
+			if includePublishedAt {
+				row = append(row, publishedTime(item))
+			}
+			rows = append(rows, row)
 		case api.SearchTypeVideo:
-			rows = append(rows, []string{prefix, stringValue(item["bvid"]), stringValue(item["title"]), stringValue(item["author"]), formatCount(item["play"]), formatCount(item["danmaku"]), formatCount(item["favorite"]), searchPublishedTime(item), stringValue(item["duration"])})
+			row := []string{prefix, stringValue(item["bvid"]), stringValue(item["title"]), stringValue(item["author"]), formatCount(item["play"]), formatCount(item["danmaku"]), formatCount(item["favorite"])}
+			if includePublishedAt {
+				row = append(row, publishedTime(item))
+			}
+			rows = append(rows, append(row, stringValue(item["duration"])))
 		case api.SearchTypeUser:
-			rows = append(rows, []string{prefix, stringValue(item["uid"]), stringValue(item["name"]), formatCount(item["fans"]), fmt.Sprintf("%d", intValue(item["videos"], 0)), stringValue(item["sign"]), searchPublishedTime(item)})
+			row := []string{prefix, stringValue(item["uid"]), stringValue(item["name"]), formatCount(item["fans"]), fmt.Sprintf("%d", intValue(item["videos"], 0)), stringValue(item["sign"])}
+			if includePublishedAt {
+				row = append(row, publishedTime(item))
+			}
+			rows = append(rows, row)
 		case api.SearchTypeBangumi, api.SearchTypeMedia:
-			rows = append(rows, []string{prefix, stringValue(item["id"]), stringValue(item["title"]), stringValue(item["areas"]), stringValue(item["score"]), searchPublishedTime(item), stringValue(item["index_show"])})
+			row := []string{prefix, stringValue(item["id"]), stringValue(item["title"]), stringValue(item["areas"]), stringValue(item["score"])}
+			if includePublishedAt {
+				row = append(row, publishedTime(item))
+			}
+			rows = append(rows, append(row, stringValue(item["index_show"])))
 		case api.SearchTypeLive:
-			rows = append(rows, []string{prefix, stringValue(item["room_id"]), stringValue(item["title"]), stringValue(item["author"]), formatCount(item["online"]), stringValue(item["category"]), searchPublishedTime(item)})
+			row := []string{prefix, stringValue(item["room_id"]), stringValue(item["title"]), stringValue(item["author"]), formatCount(item["online"]), stringValue(item["category"])}
+			if includePublishedAt {
+				row = append(row, publishedTime(item))
+			}
+			rows = append(rows, row)
 		default:
-			rows = append(rows, []string{prefix, stringValue(item["id"]), stringValue(item["title"]), stringValue(item["author"]), searchPublishedTime(item)})
+			row := []string{prefix, stringValue(item["id"]), stringValue(item["title"]), stringValue(item["author"])}
+			if includePublishedAt {
+				row = append(row, publishedTime(item))
+			}
+			rows = append(rows, row)
 		}
 	}
 	return rows
-}
-
-func searchPublishedTime(item map[string]any) string {
-	value := strings.TrimSpace(stringValue(item["published_at"]))
-	if value == "" {
-		return "-"
-	}
-	if parsed, err := time.Parse(time.RFC3339, value); err == nil {
-		return parsed.Local().Format("2006-01-02 15:04")
-	}
-	return value
 }

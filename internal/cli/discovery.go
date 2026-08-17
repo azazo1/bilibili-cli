@@ -36,9 +36,10 @@ func newHotCommand(app *App) *cobra.Command {
 				payloadItems = append(payloadItems, model.NormalizeVideoSummary(item))
 			}
 			payload := map[string]any{"items": payloadItems, "page": page, "count": count}
+			includePublishedAt := hasPublishedAt(payloadItems)
 			return app.CompleteTable(payload, mode, asJSON, asYAML, func(w io.Writer) {
-				rows := videoRows(items, false)
-				app.renderTable(w, "热门视频", []string{"#", "BV号", "标题", "UP主", "播放", "点赞"}, rows)
+				rows := videoRows(items, payloadItems, false, includePublishedAt)
+				app.renderTable(w, "热门视频", videoListHeaders("点赞", includePublishedAt), rows)
 			})
 		},
 	}
@@ -75,14 +76,10 @@ func newRankCommand(app *App) *cobra.Command {
 				payloadItems = append(payloadItems, model.NormalizeVideoSummary(item))
 			}
 			payload := map[string]any{"items": payloadItems, "day": day, "count": count}
+			includePublishedAt := hasPublishedAt(payloadItems)
 			return app.CompleteTable(payload, mode, asJSON, asYAML, func(w io.Writer) {
-				rows := make([][]string, 0, len(items))
-				for index, item := range items {
-					owner := mapValue(item["owner"])
-					stat := mapValue(item["stat"])
-					rows = append(rows, []string{fmt.Sprintf("%d", index+1), stringValue(item["bvid"]), stringValue(item["title"]), stringValue(owner["name"]), formatCount(stat["view"]), stringValue(item["score"])})
-				}
-				app.renderTable(w, "全站排行榜", []string{"#", "BV号", "标题", "UP主", "播放", "综合分"}, rows)
+				rows := videoRows(items, payloadItems, true, includePublishedAt)
+				app.renderTable(w, "全站排行榜", videoListHeaders("综合分", includePublishedAt), rows)
 			})
 		},
 	}
@@ -92,16 +89,28 @@ func newRankCommand(app *App) *cobra.Command {
 	return command
 }
 
-func videoRows(items []map[string]any, rank bool) [][]string {
+func videoListHeaders(lastHeader string, includePublishedAt bool) []string {
+	headers := []string{"#", "BV号", "标题", "UP主"}
+	if includePublishedAt {
+		headers = append(headers, "发布时间")
+	}
+	return append(headers, "播放", lastHeader)
+}
+
+func videoRows(source, items []map[string]any, rank, includePublishedAt bool) [][]string {
 	rows := make([][]string, 0, len(items))
 	for index, item := range items {
 		owner := mapValue(item["owner"])
-		stat := mapValue(item["stat"])
-		last := formatCount(stat["like"])
+		stats := mapValue(item["stats"])
+		last := formatCount(stats["like"])
 		if rank {
-			last = stringValue(item["score"])
+			last = stringValue(source[index]["score"])
 		}
-		rows = append(rows, []string{fmt.Sprintf("%d", index+1), stringValue(item["bvid"]), stringValue(item["title"]), stringValue(owner["name"]), formatCount(stat["view"]), last})
+		row := []string{fmt.Sprintf("%d", index+1), stringValue(item["bvid"]), stringValue(item["title"]), stringValue(owner["name"])}
+		if includePublishedAt {
+			row = append(row, publishedTime(item))
+		}
+		rows = append(rows, append(row, formatCount(stats["view"]), last))
 	}
 	return rows
 }

@@ -158,6 +158,22 @@ func FormatCount(value any) string {
 	return strconv.Itoa(count)
 }
 
+func PublishedAt(item map[string]any) string {
+	for _, key := range []string{"published_at", "pubdate", "pub_time", "publish_time", "pubtime", "created", "ctime", "senddate", "live_time", "publish_time_text"} {
+		value := item[key]
+		if value == nil {
+			continue
+		}
+		if timestamp := ToInt64(value, 0); timestamp > 0 {
+			return timestampISO(timestamp)
+		}
+		if text := strings.TrimSpace(String(value)); text != "" && text != "0" && text != "-1" {
+			return text
+		}
+	}
+	return ""
+}
+
 func NormalizeUser(info map[string]any) map[string]any {
 	levelInfo := Map(info["level_info"])
 	wallet := Map(info["wallet"])
@@ -213,6 +229,7 @@ func NormalizeVideoSummary(value map[string]any) map[string]any {
 		"aid":               ToInt(value["aid"], 0),
 		"title":             StripHTML(value["title"]),
 		"description":       firstString(value["desc"], value["description"]),
+		"published_at":      PublishedAt(value),
 		"duration_seconds":  duration,
 		"duration":          FormatDuration(duration),
 		"url":               url,
@@ -259,6 +276,7 @@ func NormalizeFavoriteMedia(item map[string]any) map[string]any {
 		"id":               firstString(item["bvid"], item["id"]),
 		"bvid":             String(item["bvid"]),
 		"title":            String(item["title"]),
+		"published_at":     PublishedAt(item),
 		"duration_seconds": duration,
 		"duration":         FormatDuration(duration),
 		"upper":            map[string]any{"name": String(upper["name"])},
@@ -276,11 +294,12 @@ func NormalizeHistoryItem(item map[string]any) map[string]any {
 	identifier := firstString(history["bvid"], item["bvid"], history["oid"])
 	author := firstString(owner["name"], item["author_name"], item["author"])
 	return map[string]any{
-		"id":         identifier,
-		"bvid":       firstString(history["bvid"], item["bvid"]),
-		"title":      firstString(item["title"], item["name"]),
-		"author":     author,
-		"viewed_at":  timestampISO(viewedAt),
+		"id":           identifier,
+		"bvid":         firstString(history["bvid"], item["bvid"]),
+		"title":        firstString(item["title"], item["name"]),
+		"author":       author,
+		"published_at": PublishedAt(item),
+		"viewed_at":    timestampISO(viewedAt),
 	}
 }
 
@@ -292,6 +311,7 @@ func NormalizeWatchLaterItem(item map[string]any) map[string]any {
 		"bvid":             String(item["bvid"]),
 		"title":            String(item["title"]),
 		"author":           String(owner["name"]),
+		"published_at":     PublishedAt(item),
 		"duration_seconds": duration,
 		"duration":         FormatDuration(duration),
 	}
