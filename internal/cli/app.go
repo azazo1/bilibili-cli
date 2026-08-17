@@ -14,7 +14,7 @@ import (
 	"github.com/azazo1/bilibili-cli/internal/output"
 )
 
-const Version = "0.1.0"
+var Version = "devel"
 
 type App struct {
 	API         *api.Client

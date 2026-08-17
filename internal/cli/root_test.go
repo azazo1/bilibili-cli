@@ -26,6 +26,27 @@ func newTestApp(t *testing.T) *App {
 	return NewApp()
 }
 
+func TestRootVersionOutputUsesBuildVersion(t *testing.T) {
+	originalVersion := Version
+	Version = "v0.1.0"
+	t.Cleanup(func() {
+		Version = originalVersion
+	})
+
+	app := newTestApp(t)
+	root := NewRoot(app)
+	stdout := &bytes.Buffer{}
+	root.SetOut(stdout)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"--version"})
+	if err := root.ExecuteContext(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := stdout.String(), "v0.1.0\n"; got != want {
+		t.Fatalf("version output = %q, want %q", got, want)
+	}
+}
+
 func TestVideoInvalidBVIDEmitsStructuredError(t *testing.T) {
 	app := newTestApp(t)
 	stdout := &bytes.Buffer{}

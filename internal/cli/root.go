@@ -23,6 +23,7 @@ func NewRoot(app *App) *cobra.Command {
 			return nil
 		},
 	}
+	root.SetVersionTemplate("{{.Version}}\n")
 	root.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "启用调试日志")
 	root.PersistentFlags().BoolVar(&app.Out.NoTruncate, "no-truncate", false, "表格不按终端宽度截断")
 	root.AddCommand(newMeCommand(app))

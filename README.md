@@ -18,9 +18,12 @@
 ## 构建
 
 ```shell
-go build -o bin/bili ./cmd/bili
+just build
 ./bin/bili --help
+./bin/bili --version
 ```
+
+`bili --version` 在版本 tag 上直接显示 tag. 后续干净提交显示最近 tag 和短 commit, 脏工作区使用 `^` 分隔. 首个版本 tag 之前使用 `devel` 作为基础版本.
 
 也可以直接运行:
 
@@ -157,4 +160,16 @@ bili search "关键词" --type bangumi --order click
 ```shell
 go test ./...
 just test
+```
+
+## 发布
+
+发布版本以 `vX.Y.Z` 形式的 annotated tag 为唯一来源. 先为版本写入 `docs/changelog/X.Y.Z.md`, 再提交该文件并创建 tag. GitHub Actions 会校验 tag annotation 与说明文件完全一致, 只有六个平台产物和校验和都通过后才会创建或更新 GitHub Release.
+
+```shell
+git add docs/changelog/0.1.0.md
+git commit -m "docs: add v0.1.0 release notes"
+git tag -a "v0.1.0" --cleanup=verbatim -F "docs/changelog/0.1.0.md"
+git push origin main
+git push origin "v0.1.0"
 ```
