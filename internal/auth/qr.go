@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"strings"
 	"time"
@@ -25,9 +26,41 @@ type qrPollEnvelope struct {
 	Data    map[string]any `json:"data"`
 }
 
+const qrWebSource = "main-fe-header"
+
 func (s *Store) QRLogin(ctx context.Context, out io.Writer) (*api.Credential, error) {
+	session, err := s.newQRLoginSession()
+	if err != nil {
+		return nil, api.NewError(api.CodeInternal, "登录", err.Error())
+	}
+	return session.qrLogin(ctx, out)
+}
+
+func (s *Store) newQRLoginSession() (*Store, error) {
+	if s.Client == nil {
+		return nil, fmt.Errorf("登录客户端未初始化")
+	}
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		return nil, err
+	}
+	baseClient := s.Client.HTTP
+	if baseClient == nil {
+		baseClient = http.DefaultClient
+	}
+	httpClient := *baseClient
+	httpClient.Jar = jar
+	apiClient := *s.Client
+	apiClient.HTTP = &httpClient
+	session := *s
+	session.Client = &apiClient
+	return &session, nil
+}
+
+func (s *Store) qrLogin(ctx context.Context, out io.Writer) (*api.Credential, error) {
 	var generated qrGenerateResponse
-	if err := s.Client.RequestPassport(ctx, http.MethodGet, "/x/passport-login/web/qrcode/generate", nil, nil, nil, &generated); err != nil {
+	query := url.Values{"source": []string{qrWebSource}}
+	if err := s.Client.RequestPassport(ctx, http.MethodGet, "/x/passport-login/web/qrcode/generate", query, nil, nil, &generated); err != nil {
 		return nil, api.NewError(api.CodeNetwork, "登录", err.Error())
 	}
 	if generated.URL == "" || generated.QRCodeKey == "" {
@@ -40,6 +73,7 @@ func (s *Store) QRLogin(ctx context.Context, out io.Writer) (*api.Credential, er
 		} else {
 			fmt.Fprintln(out, generated.URL)
 		}
+		fmt.Fprintf(out, "%s\n", generated.URL)
 		fmt.Fprintln(out, "扫码后请在手机上确认登录...")
 	}
 
@@ -75,7 +109,10 @@ func (s *Store) QRLogin(ctx context.Context, out io.Writer) (*api.Credential, er
 }
 
 func (s *Store) pollQRCode(ctx context.Context, key string) (*api.Credential, string, error) {
-	query := url.Values{"qrcode_key": []string{key}}
+	query := url.Values{
+		"qrcode_key": []string{key},
+		"source":     []string{qrWebSource},
+	}
 	requestURL := s.Client.PassportURL("/x/passport-login/web/qrcode/poll") + "?" + query.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
@@ -104,11 +141,19 @@ func (s *Store) pollQRCode(ctx context.Context, key string) (*api.Credential, st
 	if err := json.Unmarshal(body, &envelope); err != nil {
 		return nil, "", api.NewError(api.CodeUpstream, "登录", err.Error())
 	}
-	switch envelope.Code {
+	pollCode := qrPollCode(envelope.Data, envelope.Code)
+	switch pollCode {
 	case 0:
-		credential := credentialFromLoginURL(apiString(envelope.Data["url"]))
+		loginURL := apiString(envelope.Data["url"])
+		credential := credentialFromPollData(envelope.Data, resp.Cookies())
+		if credential == nil && loginURL != "" {
+			credential, _ = s.credentialFromLoginRedirect(ctx, loginURL)
+		}
 		if credential == nil {
 			return nil, "", api.NewError(api.CodeUpstream, "登录", "登录响应缺少凭证")
+		}
+		if refreshToken := apiString(envelope.Data["refresh_token"]); refreshToken != "" {
+			credential.AcTimeValue = refreshToken
 		}
 		return credential, "done", nil
 	case 86038:
@@ -118,8 +163,34 @@ func (s *Store) pollQRCode(ctx context.Context, key string) (*api.Credential, st
 	case 86101:
 		return nil, "waiting", nil
 	default:
-		return nil, "", api.NewError(api.CodeUpstream, "登录", fmt.Sprintf("[%d] %s", envelope.Code, envelope.Message))
+		message := apiString(envelope.Data["message"])
+		if message == "" {
+			message = envelope.Message
+		}
+		return nil, "", api.NewError(api.CodeUpstream, "登录", fmt.Sprintf("[%d] %s", pollCode, message))
 	}
+}
+
+func qrPollCode(data map[string]any, fallback int) int {
+	value, ok := data["code"]
+	if !ok {
+		return fallback
+	}
+	switch typed := value.(type) {
+	case float64:
+		return int(typed)
+	case float32:
+		return int(typed)
+	case int:
+		return typed
+	case int64:
+		return int(typed)
+	case json.Number:
+		if parsed, err := typed.Int64(); err == nil {
+			return int(parsed)
+		}
+	}
+	return fallback
 }
 
 func credentialFromLoginURL(raw string) *api.Credential {
@@ -139,6 +210,96 @@ func credentialFromLoginURL(raw string) *api.Credential {
 		"buvid4":      values["buvid4"],
 		"DedeUserID":  values["DedeUserID"],
 	})
+}
+
+func credentialFromPollData(data map[string]any, responseCookies []*http.Cookie) *api.Credential {
+	if credential := credentialFromLoginURL(apiString(data["url"])); credential != nil {
+		return credential
+	}
+	if credential := credentialFromCookieInfo(data["cookie_info"]); credential != nil {
+		return credential
+	}
+	return credentialFromResponseCookies(responseCookies)
+}
+
+func credentialFromCookieInfo(value any) *api.Credential {
+	info, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	items, ok := info["cookies"].([]any)
+	if !ok {
+		return nil
+	}
+	values := make(map[string]string, len(items))
+	for _, item := range items {
+		cookie, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		name := apiString(cookie["name"])
+		if name != "" {
+			values[name] = apiString(cookie["value"])
+		}
+	}
+	return credentialFromCookies(values)
+}
+
+func credentialFromResponseCookies(cookies []*http.Cookie) *api.Credential {
+	values := make(map[string]string, len(cookies))
+	for _, cookie := range cookies {
+		if cookie != nil && cookie.Name != "" {
+			values[cookie.Name] = cookie.Value
+		}
+	}
+	return credentialFromCookies(values)
+}
+
+func (s *Store) credentialFromLoginRedirect(ctx context.Context, rawURL string) (*api.Credential, error) {
+	if strings.HasPrefix(rawURL, "//") {
+		rawURL = "https:" + rawURL
+	}
+	loginURL, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, err
+	}
+	host := strings.ToLower(loginURL.Hostname())
+	if loginURL.Scheme == "" || (host != "bilibili.com" && !strings.HasSuffix(host, ".bilibili.com")) {
+		return nil, nil
+	}
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		return nil, err
+	}
+	baseClient := s.Client.HTTP
+	if baseClient == nil {
+		baseClient = http.DefaultClient
+	}
+	redirectClient := *baseClient
+	redirectClient.Jar = jar
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, loginURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", s.Client.UserAgent)
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	req.Header.Set("Referer", "https://www.bilibili.com/")
+	resp, err := redirectClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+		return nil, err
+	}
+	cookies := append([]*http.Cookie{}, resp.Cookies()...)
+	cookies = append(cookies, jar.Cookies(loginURL)...)
+	homeURL := &url.URL{Scheme: "https", Host: "www.bilibili.com"}
+	cookies = append(cookies, jar.Cookies(homeURL)...)
+	return credentialFromResponseCookies(cookies), nil
 }
 
 func rawQueryValues(raw string) map[string]string {
