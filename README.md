@@ -1,6 +1,6 @@
 # bilibili-cli-go
 
-一个 Go 实现的 Bilibili 终端客户端. 项目覆盖上游 Python CLI 的账户, 视频, 搜索, 发现, 收藏, 动态, 互动和音频工作流.
+一个 Go 实现的 Bilibili 终端客户端. 项目覆盖上游 Python CLI 的账户, 视频, 搜索, 发现, 收藏, 动态, 互动和媒体下载工作流.
 
 ## 功能
 
@@ -11,7 +11,7 @@
 - 动态时间线, 我的动态, 文字动态发布和删除.
 - 点赞, 投币, 一键三连和取消关注.
 - 保存凭证, QR 登录, JSON/YAML 稳定 envelope 输出.
-- 音频下载和 16 kHz 单声道 WAV 分段. 非 PCM WAV 输入通过系统 `ffmpeg` 转码.
+- 视频音频流和视频流下载, 支持仅下载音频或视频.
 
 `references/bilibili-cli` 保存上游代码作为本地迁移参考, 已被 Git 忽略.
 
@@ -47,6 +47,17 @@ go run ./cmd/bili video st BV1ABcsztEcY -o ./subtitles/subt.srt
 
 `bili video subtitle` 会列出播放器接口返回的所有字幕轨道, 包含 ID, 语言, 字幕类型, AI 标记, 作者和字幕行数. 可通过 `--id`, `--language` 或 `--type all|ai|non-ai` 筛选轨道. `--language` 使用 API 的 `lan`, 并兼容 `zh-CN` 与 `zh_CN` 两种写法. 当 `-o` 指向 `subt.srt` 时, 每条可下载字幕会写为 `subt-<lan>.srt` 或 `subt-<lan>-ai.srt`.
 
+## 视频下载
+
+```shell
+bili video download BV1ABcsztEcY
+bili video download BV1ABcsztEcY -o ./downloads
+bili video download BV1ABcsztEcY --audio-only
+bili video download BV1ABcsztEcY --video-only
+```
+
+`bili video download` 默认保存到当前文件夹. DASH 地址会分别保存音频 `.m4a` 和视频 `.mp4`, 原生 `durl` 地址会保存一个 `.mp4`. `--audio-only` 和 `--video-only` 不能同时使用.
+
 其他命令按领域组织在 `bili me`, `bili user`, `bili video` 和 `bili dynamic` 下. 例如 `bili user video UID_OR_NAME`, `bili user follow UID`, `bili me fav`, `bili video watch` 和 `bili dynamic post TEXT`.
 
 配置和认证默认保存在 `~/.config/bilibili-cli/config.toml` 与 `~/.config/bilibili-cli/auth.json`. 如需从已有 cookie 导入, 可以传入 `BILI_COOKIE` 或 Netscape cookie 文件路径 `BILI_COOKIE_FILE`.
@@ -72,6 +83,8 @@ confirm_dangerous_actions = true
 `output.format` 支持 `auto`, `rich`, `json`, `yaml`. `OUTPUT` 环境变量会覆盖这个值.
 
 `safety.read_only = true` 会拒绝动态发布和删除, 点赞, 投币, 一键三连, 取关等账户侧写操作. `me login` 和 `me logout` 仍然可用. `confirm_dangerous_actions` 控制删除动态和取关是否需要额外确认.
+
+视频信息和媒体下载属于读取操作, 在只读模式下仍然可用.
 
 ## 输出
 

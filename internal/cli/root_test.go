@@ -436,7 +436,7 @@ func TestCommandHierarchyUsesDomainParents(t *testing.T) {
 		{"me", "history"},
 		{"me", "dynamic"},
 		{"video", "like"},
-		{"video", "audio"},
+		{"video", "download"},
 		{"video", "hot"},
 		{"video", "watch"},
 		{"user", "video"},

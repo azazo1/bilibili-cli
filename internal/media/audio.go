@@ -22,8 +22,16 @@ var downloadHeaders = map[string]string{
 }
 
 func Download(ctx context.Context, audioURL, outputPath string, logger *slog.Logger) (int64, error) {
-	if strings.TrimSpace(audioURL) == "" {
-		return 0, errors.New("音频地址为空")
+	return download(ctx, audioURL, outputPath, logger, "音频")
+}
+
+func DownloadFile(ctx context.Context, mediaURL, outputPath string, logger *slog.Logger) (int64, error) {
+	return download(ctx, mediaURL, outputPath, logger, "媒体")
+}
+
+func download(ctx context.Context, mediaURL, outputPath string, logger *slog.Logger, label string) (int64, error) {
+	if strings.TrimSpace(mediaURL) == "" {
+		return 0, errors.New(label + "地址为空")
 	}
 	if logger == nil {
 		logger = slog.Default()
@@ -33,12 +41,12 @@ func Download(ctx context.Context, audioURL, outputPath string, logger *slog.Log
 		if err := ctx.Err(); err != nil {
 			return 0, err
 		}
-		if written, err := downloadOnce(ctx, audioURL, outputPath, logger); err == nil {
+		if written, err := downloadOnce(ctx, mediaURL, outputPath, logger, label); err == nil {
 			return written, nil
 		} else {
 			lastErr = err
 			if attempt < 3 {
-				logger.Warn("音频下载失败, 准备重试", "attempt", attempt, "error", err)
+				logger.Warn(label+"下载失败, 准备重试", "attempt", attempt, "error", err)
 				select {
 				case <-ctx.Done():
 					return 0, ctx.Err()
@@ -47,11 +55,11 @@ func Download(ctx context.Context, audioURL, outputPath string, logger *slog.Log
 			}
 		}
 	}
-	return 0, fmt.Errorf("音频下载失败: %w", lastErr)
+	return 0, fmt.Errorf("%s下载失败: %w", label, lastErr)
 }
 
-func downloadOnce(ctx context.Context, audioURL, outputPath string, logger *slog.Logger) (int64, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, audioURL, nil)
+func downloadOnce(ctx context.Context, mediaURL, outputPath string, logger *slog.Logger, label string) (int64, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, mediaURL, nil)
 	if err != nil {
 		return 0, err
 	}
@@ -64,7 +72,7 @@ func downloadOnce(ctx context.Context, audioURL, outputPath string, logger *slog
 		return 0, err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return 0, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
@@ -91,7 +99,7 @@ func downloadOnce(ctx context.Context, audioURL, outputPath string, logger *slog
 				return 0, writeErr
 			}
 			if written%(1024*1024) < int64(read) || time.Since(lastReport) >= 5*time.Second {
-				logger.Info("音频下载进度", "bytes", written)
+				logger.Info(label+"下载进度", "bytes", written)
 				lastReport = time.Now()
 			}
 		}

@@ -111,7 +111,7 @@ func newVideoCommand(app *App) *cobra.Command {
 	addStructuredFlags(command, &asJSON, &asYAML)
 	command.AddCommand(
 		newSubtitleCommand(app),
-		newAudioCommand(app),
+		newVideoDownloadCommand(app),
 		newCoinCommand(app),
 		newHotCommand(app),
 		newLikeCommand(app),
