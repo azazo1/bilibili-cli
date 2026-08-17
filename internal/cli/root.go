@@ -1,6 +1,11 @@
 package cli
 
-import "github.com/spf13/cobra"
+import (
+	"github.com/spf13/cobra"
+
+	"github.com/azazo1/bilibili-cli/internal/api"
+	"github.com/azazo1/bilibili-cli/internal/output"
+)
 
 func NewRoot(app *App) *cobra.Command {
 	var verbose bool
@@ -10,8 +15,12 @@ func NewRoot(app *App) *cobra.Command {
 		Version:       Version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		PersistentPreRun: func(_ *cobra.Command, _ []string) {
+		PersistentPreRunE: func(_ *cobra.Command, _ []string) error {
 			app.setupLogging(verbose)
+			if app.ConfigErr != nil {
+				return app.Fail(api.NewError(api.CodeInvalidInput, "", "加载 config.toml 失败: "+app.ConfigErr.Error()), "", output.ModeRich)
+			}
+			return nil
 		},
 	}
 	root.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "启用调试日志")

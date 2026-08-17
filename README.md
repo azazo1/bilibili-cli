@@ -34,7 +34,29 @@ go run ./cmd/bili login
 go run ./cmd/bili status --yaml
 ```
 
-凭证默认保存在 `~/.bilibili-cli/credential.json`. 如需从已有 cookie 导入, 可以传入 `BILI_COOKIE` 或 Netscape cookie 文件路径 `BILI_COOKIE_FILE`.
+配置和认证默认保存在 `~/.config/bilibili-cli/config.toml` 与 `~/.config/bilibili-cli/auth.json`. 如需从已有 cookie 导入, 可以传入 `BILI_COOKIE` 或 Netscape cookie 文件路径 `BILI_COOKIE_FILE`.
+
+## 配置
+
+首次保存认证凭证时会创建 `config.toml`. 根目录的 [`config.toml.example`](./config.toml.example) 可作为手动创建配置的模板.
+
+```toml
+version = 1
+
+[output]
+format = "auto"
+
+[network]
+timeout_seconds = 30
+
+[safety]
+read_only = false
+confirm_dangerous_actions = true
+```
+
+`output.format` 支持 `auto`, `rich`, `json`, `yaml`. `OUTPUT` 环境变量会覆盖这个值.
+
+`safety.read_only = true` 会拒绝动态发布和删除, 点赞, 投币, 一键三连, 取关等账户侧写操作. `login` 和 `logout` 仍然可用. `confirm_dangerous_actions` 控制删除动态和取关是否需要额外确认.
 
 ## 输出
 
@@ -52,4 +74,3 @@ data: {}
 go test ./...
 just test
 ```
-

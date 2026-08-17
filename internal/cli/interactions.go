@@ -147,7 +147,7 @@ func newUnfollowCommand(app *App) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if !yes && !confirm(app.Out.Stdout, uid) {
+			if !yes && app.ShouldConfirmDangerousAction() && !confirm(app.Out.Stdout, uid) {
 				return nil
 			}
 			if fetchErr := app.API.UnfollowUser(contextOrBackground(cmd.Context()), uid, credential); fetchErr != nil {
@@ -161,4 +161,3 @@ func newUnfollowCommand(app *App) *cobra.Command {
 	addStructuredFlags(command, &asJSON, &asYAML)
 	return command
 }
-

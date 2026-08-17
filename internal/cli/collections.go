@@ -431,7 +431,7 @@ func newDynamicDeleteCommand(app *App) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if !yes && !confirm(app.Out.Stdout, id) {
+			if !yes && app.ShouldConfirmDangerousAction() && !confirm(app.Out.Stdout, id) {
 				return nil
 			}
 			if fetchErr := app.API.DeleteDynamic(contextOrBackground(cmd.Context()), id, credential); fetchErr != nil {

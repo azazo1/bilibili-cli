@@ -13,7 +13,7 @@ func TestStoreSaveLoadAndOptionalMode(t *testing.T) {
 	dir := t.TempDir()
 	store := &Store{
 		Dir:  dir,
-		File: filepath.Join(dir, "credential.json"),
+		File: filepath.Join(dir, "auth.json"),
 		Now:  func() time.Time { return time.Unix(1700000000, 0) },
 	}
 	credential := &api.Credential{Sessdata: "session", BiliJct: "csrf", Buvid3: "device"}
@@ -39,7 +39,7 @@ func TestCredentialCookieHeaderPreservesEscapedSession(t *testing.T) {
 
 func TestWriteModeKeepsReadOnlySavedCredential(t *testing.T) {
 	dir := t.TempDir()
-	store := &Store{Dir: dir, File: filepath.Join(dir, "credential.json"), Now: time.Now}
+	store := &Store{Dir: dir, File: filepath.Join(dir, "auth.json"), Now: time.Now}
 	if err := store.Save(&api.Credential{Sessdata: "session"}); err != nil {
 		t.Fatal(err)
 	}
@@ -49,5 +49,24 @@ func TestWriteModeKeepsReadOnlySavedCredential(t *testing.T) {
 	}
 	if saved, loadErr := store.LoadSaved(); loadErr != nil || saved == nil || saved.Sessdata != "session" {
 		t.Fatalf("read-only credential was lost: %#v, %v", saved, loadErr)
+	}
+}
+
+func TestSaveRunsStoragePreparationHook(t *testing.T) {
+	dir := t.TempDir()
+	prepared := false
+	store := &Store{
+		Dir:  dir,
+		File: filepath.Join(dir, "auth.json"),
+		PrepareSave: func() error {
+			prepared = true
+			return nil
+		},
+	}
+	if err := store.Save(&api.Credential{Sessdata: "session"}); err != nil {
+		t.Fatal(err)
+	}
+	if !prepared {
+		t.Fatal("Save did not prepare shared storage")
 	}
 }

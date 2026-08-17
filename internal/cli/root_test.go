@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 
 	"github.com/azazo1/bilibili-cli/internal/api"
@@ -67,5 +68,45 @@ func TestHotCommandUsesNormalizedEnvelope(t *testing.T) {
 	item := items[0].(map[string]any)
 	if envelope["ok"] != true || item["duration"] != "01:00" || item["bvid"] != "BV1ABcsztEcY" {
 		t.Fatalf("unexpected envelope: %#v", envelope)
+	}
+}
+
+func TestReadOnlyBlocksAccountWriteCommands(t *testing.T) {
+	app := NewApp()
+	app.Config.Safety.ReadOnly = true
+	stdout := &bytes.Buffer{}
+	app.Out = &output.Writer{Stdout: stdout, Stderr: &bytes.Buffer{}}
+	root := NewRoot(app)
+	root.SetArgs([]string{"like", "BV1ABcsztEcY", "--json"})
+	err := root.ExecuteContext(context.Background())
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != 1 {
+		t.Fatalf("unexpected command error: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	errorData := payload["error"].(map[string]any)
+	if errorData["code"] != string(api.CodePermissionDenied) {
+		t.Fatalf("unexpected payload: %#v", payload)
+	}
+}
+
+func TestReadOnlyAllowsLogout(t *testing.T) {
+	app := NewApp()
+	app.Config.Safety.ReadOnly = true
+	tempDir := t.TempDir()
+	app.Auth.Dir = tempDir
+	app.Auth.File = filepath.Join(tempDir, "auth.json")
+	stdout := &bytes.Buffer{}
+	app.Out = &output.Writer{Stdout: stdout, Stderr: &bytes.Buffer{}}
+	root := NewRoot(app)
+	root.SetArgs([]string{"logout"})
+	if err := root.ExecuteContext(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if stdout.Len() == 0 {
+		t.Fatal("logout did not render completion")
 	}
 }

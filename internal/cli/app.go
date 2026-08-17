@@ -10,24 +10,51 @@ import (
 
 	"github.com/azazo1/bilibili-cli/internal/api"
 	"github.com/azazo1/bilibili-cli/internal/auth"
+	"github.com/azazo1/bilibili-cli/internal/config"
 	"github.com/azazo1/bilibili-cli/internal/output"
 )
 
 const Version = "0.6.2"
 
 type App struct {
-	API    *api.Client
-	Auth   *auth.Store
-	Out    *output.Writer
-	Logger *slog.Logger
+	API         *api.Client
+	Auth        *auth.Store
+	Config      config.Config
+	ConfigStore *config.Store
+	ConfigErr   error
+	Out         *output.Writer
+	Logger      *slog.Logger
 }
 
 func NewApp() *App {
 	logger := slog.Default()
+	configStore := config.NewStore()
+	configPresent := configStore.Exists()
+	settings, configErr := configStore.Load()
+	if configErr != nil {
+		settings = config.Default()
+	}
 	client := api.NewClient()
+	if configPresent {
+		client.SetTimeout(settings.Network.TimeoutSeconds)
+	}
 	store := auth.NewStore(client)
+	store.PrepareSave = func() error {
+		_, err := configStore.Ensure()
+		return err
+	}
 	store.Logger = logger
-	return &App{API: client, Auth: store, Out: output.NewWriter(), Logger: logger}
+	out := output.NewWriter()
+	out.DefaultMode = settings.Output.Format
+	return &App{
+		API:         client,
+		Auth:        store,
+		Config:      settings,
+		ConfigStore: configStore,
+		ConfigErr:   configErr,
+		Out:         out,
+		Logger:      logger,
+	}
 }
 
 type ExitError struct {
@@ -85,6 +112,11 @@ func (a *App) Execute(ctx context.Context) error {
 }
 
 func (a *App) RequireCredential(ctx context.Context, write bool, mode output.Mode, message string) (*api.Credential, error) {
+	if write {
+		if err := a.RequireWritable(mode, "账户写操作"); err != nil {
+			return nil, err
+		}
+	}
 	requested := auth.ModeRead
 	if write {
 		requested = auth.ModeWrite
@@ -107,6 +139,17 @@ func (a *App) RequireCredential(ctx context.Context, write bool, mode output.Mod
 	return nil, a.Fail(api.NewError(api.CodeNotAuthenticated, "", message), "", mode)
 }
 
+func (a *App) RequireWritable(mode output.Mode, action string) error {
+	if !a.Config.Safety.ReadOnly {
+		return nil
+	}
+	return a.Fail(api.NewError(api.CodePermissionDenied, "", "只读模式已启用, 禁止 "+action), "", mode)
+}
+
+func (a *App) ShouldConfirmDangerousAction() bool {
+	return a.Config.Safety.ConfirmDangerousActions
+}
+
 func (a *App) setupLogging(verbose bool) {
 	level := slog.LevelWarn
 	if verbose {
@@ -118,4 +161,3 @@ func (a *App) setupLogging(verbose bool) {
 	a.Auth.Logger = a.Logger
 	a.API.Logger = a.Logger
 }
-

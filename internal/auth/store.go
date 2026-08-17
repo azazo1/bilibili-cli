@@ -25,11 +25,12 @@ const (
 const credentialTTL = 7 * 24 * time.Hour
 
 type Store struct {
-	Client *api.Client
-	Dir    string
-	File   string
-	Logger *slog.Logger
-	Now    func() time.Time
+	Client      *api.Client
+	Dir         string
+	File        string
+	PrepareSave func() error
+	Logger      *slog.Logger
+	Now         func() time.Time
 }
 
 func (s *Store) ensureDefaults() {
@@ -46,11 +47,11 @@ func NewStore(client *api.Client) *Store {
 	if err != nil {
 		home = "."
 	}
-	dir := filepath.Join(home, ".bilibili-cli")
+	dir := filepath.Join(home, ".config", "bilibili-cli")
 	return &Store{
 		Client: client,
 		Dir:    dir,
-		File:   filepath.Join(dir, "credential.json"),
+		File:   filepath.Join(dir, "auth.json"),
 		Logger: slog.Default(),
 		Now:    time.Now,
 	}
@@ -81,6 +82,11 @@ func (s *Store) Save(credential *api.Credential) error {
 	}
 	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
 		return err
+	}
+	if s.PrepareSave != nil {
+		if err := s.PrepareSave(); err != nil {
+			return err
+		}
 	}
 	copy := *credential
 	copy.SavedAt = float64(s.Now().Unix())

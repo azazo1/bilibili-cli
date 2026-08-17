@@ -1,0 +1,15 @@
+# Bilibili CLI settings.
+version = 1
+
+[output]
+# auto, rich, json, or yaml.
+format = "auto"
+
+[network]
+timeout_seconds = 30
+
+[safety]
+# Block account write actions and dangerous operations.
+read_only = false
+# Ask before deleting a dynamic or unfollowing an account.
+confirm_dangerous_actions = true

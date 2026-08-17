@@ -62,6 +62,16 @@ func NewClient() *Client {
 	}
 }
 
+func (c *Client) SetTimeout(seconds int) {
+	if seconds <= 0 {
+		return
+	}
+	if c.HTTP == nil {
+		c.HTTP = &http.Client{}
+	}
+	c.HTTP.Timeout = time.Duration(seconds) * time.Second
+}
+
 func (c *Client) URL(path string) string {
 	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
 		return path

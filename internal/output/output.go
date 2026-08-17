@@ -22,12 +22,13 @@ const (
 const schemaVersion = "1"
 
 type Writer struct {
-	Stdout io.Writer
-	Stderr io.Writer
+	Stdout     io.Writer
+	Stderr     io.Writer
+	DefaultMode string
 }
 
 func NewWriter() *Writer {
-	return &Writer{Stdout: os.Stdout, Stderr: os.Stderr}
+	return &Writer{Stdout: os.Stdout, Stderr: os.Stderr, DefaultMode: "auto"}
 }
 
 func (w *Writer) Resolve(asJSON, asYAML bool) (Mode, error) {
@@ -40,7 +41,11 @@ func (w *Writer) Resolve(asJSON, asYAML bool) (Mode, error) {
 	if asYAML {
 		return ModeYAML, nil
 	}
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("OUTPUT"))) {
+	configuredMode, hasEnvironmentMode := os.LookupEnv("OUTPUT")
+	if !hasEnvironmentMode || strings.TrimSpace(configuredMode) == "" {
+		configuredMode = w.DefaultMode
+	}
+	switch strings.ToLower(strings.TrimSpace(configuredMode)) {
 	case "json":
 		return ModeJSON, nil
 	case "yaml":
@@ -111,4 +116,3 @@ func isTTY(writer io.Writer) bool {
 	info, err := file.Stat()
 	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
-
