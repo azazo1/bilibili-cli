@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/azazo1/bilibili-cli/internal/api"
+	"github.com/azazo1/bilibili-cli/internal/config"
 	"github.com/azazo1/bilibili-cli/internal/output"
 )
 
@@ -319,6 +320,39 @@ func TestConfigStatusReportsMissingConfig(t *testing.T) {
 	}
 	if app.ConfigStore.Exists() {
 		t.Fatal("config status created a config file")
+	}
+}
+
+func TestRenderConfigStatusGroupsFieldStates(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	renderConfigStatus(stdout, config.StatusReport{
+		File:         "/tmp/config.toml",
+		Exists:       true,
+		Loaded:       true,
+		NeedsUpgrade: true,
+		Fields: []config.FieldStatus{
+			{Path: "version", Value: 1, Status: "set"},
+			{Path: "output.format", Value: "auto", Status: "set"},
+			{Path: "network.timeout_seconds", Value: 30, Status: "set"},
+			{Path: "download.threads", Value: 8, Status: "missing"},
+			{Path: "safety.read_only", Value: true, Status: "set"},
+			{Path: "safety.confirm_dangerous_actions", Value: true, Status: "set"},
+		},
+	})
+	result := stdout.String()
+	for _, expected := range []string{
+		"version = 1 (set)",
+		"output:\n  format = auto (set)",
+		"network:\n  timeout_seconds = 30 (set)",
+		"download:\n  threads = 8 (missing)",
+		"safety:\n  read_only = true (set)",
+	} {
+		if !strings.Contains(result, expected) {
+			t.Fatalf("missing grouped config field %q: %s", expected, result)
+		}
+	}
+	if strings.Contains(result, "状态:") || strings.Contains(result, "文件状态:") {
+		t.Fatalf("unexpected file-level state labels: %s", result)
 	}
 }
 

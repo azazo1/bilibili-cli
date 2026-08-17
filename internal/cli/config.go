@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -102,19 +103,35 @@ func newConfigCommand(app *App) *cobra.Command {
 
 func renderConfigStatus(w io.Writer, report config.StatusReport) {
 	fmt.Fprintf(w, "配置文件: %s\n", report.File)
-	fmt.Fprintf(w, "状态: %s\n", report.Status)
-	fmt.Fprintf(w, "文件状态: %s\n", report.FileStatus)
+	fmt.Fprintf(w, "文件存在: %t\n", report.Exists)
 	fmt.Fprintf(w, "已加载: %t\n", report.Loaded)
-	fmt.Fprintf(w, "版本: %d (当前支持 %d)\n", report.SourceVersion, report.CurrentVersion)
 	fmt.Fprintf(w, "需要升级: %t\n", report.NeedsUpgrade)
+	fmt.Println()
+	currentSection := ""
 	for _, field := range report.Fields {
-		fmt.Fprintf(w, "%s: %s = %v", field.Path, field.Status, field.Value)
+		parts := strings.SplitN(field.Path, ".", 2)
+		if len(parts) == 1 {
+			if currentSection != "" {
+				fmt.Fprintln(w)
+				currentSection = ""
+			}
+			fmt.Fprintf(w, "%s = %v (%s)", parts[0], field.Value, field.Status)
+		} else {
+			if currentSection != parts[0] {
+				if currentSection != "" {
+					fmt.Fprintln(w)
+				}
+				fmt.Fprintf(w, "%s:\n", parts[0])
+				currentSection = parts[0]
+			}
+			fmt.Fprintf(w, "  %s = %v (%s)", parts[1], field.Value, field.Status)
+		}
 		if field.Error != "" {
-			fmt.Fprintf(w, " error=%s", field.Error)
+			fmt.Fprintf(w, " error: %s", field.Error)
 		}
 		fmt.Fprintln(w)
 	}
 	for _, message := range report.Errors {
-		fmt.Fprintf(w, "错误: %s\n", message)
+		fmt.Fprintf(w, "错误:\n  %s\n", message)
 	}
 }
