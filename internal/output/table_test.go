@@ -38,11 +38,22 @@ func TestRenderTableNoTruncateKeepsFullCells(t *testing.T) {
 	}
 }
 
-func TestDisplayWidthUsesEmojiPresentationWidth(t *testing.T) {
-	if got := displayWidth("⚡️新"); got != 4 {
-		t.Fatalf("displayWidth() = %d, want 4", got)
+func TestDisplayWidthHandlesEmojiGraphemes(t *testing.T) {
+	for _, testCase := range []struct {
+		value string
+		width int
+	}{
+		{"⚡️新", 4},
+		{"⭐新", 4},
+		{"❗⭕", 4},
+		{"❤️卡", 4},
+		{"👨‍👩‍👧‍👦", 2},
+	} {
+		if got := displayWidth(testCase.value); got != testCase.width {
+			t.Fatalf("displayWidth(%q) = %d, want %d", testCase.value, got, testCase.width)
+		}
 	}
-	if got := truncateDisplay("⚡️新", 2); got != "⚡️" {
-		t.Fatalf("truncateDisplay() = %q, want %q", got, "⚡️")
+	if got := truncateDisplay("⭐新", 2); got != "⭐" {
+		t.Fatalf("truncateDisplay() = %q, want %q", got, "⭐")
 	}
 }

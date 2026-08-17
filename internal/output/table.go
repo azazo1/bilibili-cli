@@ -4,8 +4,15 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"unicode"
+
+	"github.com/mattn/go-runewidth"
 )
+
+var terminalWidthCondition = func() *runewidth.Condition {
+	condition := runewidth.NewCondition()
+	condition.StrictEmojiNeutral = false
+	return condition
+}()
 
 type TableOptions struct {
 	Interactive bool
@@ -202,90 +209,13 @@ func truncateDisplay(value string, maximum int) string {
 		return value
 	}
 	suffix := ""
-	available := maximum
 	if maximum > 3 {
 		suffix = "..."
-		available -= displayWidth(suffix)
 	}
-	var builder strings.Builder
-	runes := []rune(value)
-	used := 0
-	for index, valueRune := range runes {
-		width := displayRuneWidth(runes, index)
-		if used+width > available {
-			break
-		}
-		builder.WriteRune(valueRune)
-		used += width
-	}
-	return builder.String() + suffix
+	return terminalWidthCondition.Truncate(value, maximum, suffix)
 }
 
-func displayWidth(value string) int {
-	runes := []rune(value)
-	width := 0
-	for index := range runes {
-		width += displayRuneWidth(runes, index)
-	}
-	return width
-}
-
-func displayRuneWidth(runes []rune, index int) int {
-	width := runeDisplayWidth(runes[index])
-	if width < 2 && hasEmojiPresentation(runes, index) {
-		return 2
-	}
-	return width
-}
-
-func hasEmojiPresentation(runes []rune, index int) bool {
-	return index+1 < len(runes) && runes[index+1] == 0xFE0F && isEmojiPresentationRune(runes[index])
-}
-
-func isEmojiPresentationRune(value rune) bool {
-	return value == 0x00A9 ||
-		value == 0x00AE ||
-		(value >= 0x203C && value <= 0x2049) ||
-		(value >= 0x2122 && value <= 0x2139) ||
-		(value >= 0x2194 && value <= 0x21AA) ||
-		(value >= 0x231A && value <= 0x231B) ||
-		value == 0x2328 ||
-		value == 0x23CF ||
-		(value >= 0x23E9 && value <= 0x23F3) ||
-		(value >= 0x23F8 && value <= 0x23FA) ||
-		value == 0x24C2 ||
-		(value >= 0x25AA && value <= 0x27BF) ||
-		(value >= 0x2934 && value <= 0x2935) ||
-		(value >= 0x2B05 && value <= 0x2B07) ||
-		(value >= 0x2B1B && value <= 0x2B1C) ||
-		value == 0x2B50 ||
-		value == 0x2B55 ||
-		value == 0x3030 ||
-		value == 0x303D ||
-		value == 0x3297 ||
-		value == 0x3299 ||
-		(value >= 0x1F000 && value <= 0x1FAFF)
-}
-
-func runeDisplayWidth(value rune) int {
-	if value == 0 || unicode.IsControl(value) || unicode.Is(unicode.Mn, value) || unicode.Is(unicode.Me, value) || unicode.Is(unicode.Cf, value) {
-		return 0
-	}
-	if (value >= 0x1100 && value <= 0x115F) ||
-		(value >= 0x2329 && value <= 0x232A) ||
-		(value >= 0x2E80 && value <= 0xA4CF) ||
-		(value >= 0xAC00 && value <= 0xD7A3) ||
-		(value >= 0xF900 && value <= 0xFAFF) ||
-		(value >= 0xFE10 && value <= 0xFE19) ||
-		(value >= 0xFE30 && value <= 0xFE6F) ||
-		(value >= 0xFF00 && value <= 0xFF60) ||
-		(value >= 0xFFE0 && value <= 0xFFE6) ||
-		(value >= 0x1F300 && value <= 0x1FAFF) ||
-		(value >= 0x20000 && value <= 0x3FFFD) {
-		return 2
-	}
-	return 1
-}
+func displayWidth(value string) int { return terminalWidthCondition.StringWidth(value) }
 
 func max(left, right int) int {
 	if left > right {
